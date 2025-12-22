@@ -94,6 +94,7 @@ const MessagesTab = () => {
   }, []); // Poll independently of selection
 
   const fetchMessages = async () => {
+    console.log('Polling for new messages... (' + new Date().toLocaleTimeString() + ')');
     try {
       const response = await api.getMessages();
       // Group messages by phone number for the chat list
