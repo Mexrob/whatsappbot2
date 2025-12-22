@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
 import {
   MessageSquare,
@@ -66,8 +66,14 @@ const Dashboard = ({ onLogout }) => {
         <div className="mt-auto pt-4 border-t border-slate-100 pb-2">
           <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
           <div className="px-4 py-2 bg-slate-50 rounded-xl mx-2">
-            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-21:55</p>
-            <p className="text-[10px] text-teal-600 font-bold">Auto-Sync: Activado</p>
+            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-22:00</p>
+            <p className="text-[10px] text-teal-600 font-bold mb-2">Auto-Sync: Activado</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
+            >
+              Refrescar Ahora
+            </button>
           </div>
         </div>
 
@@ -94,6 +100,11 @@ const MessagesTab = () => {
   const [messages, setMessages] = useState([]);
   const [selectedPhone, setSelectedPhone] = useState(null);
   const [newMessage, setNewMessage] = useState('');
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
     fetchMessages();
@@ -140,7 +151,8 @@ const MessagesTab = () => {
         sender: 'assistant'
       });
       setNewMessage('');
-      fetchMessages();
+      await fetchMessages();
+      setTimeout(scrollToBottom, 100);
     } catch (error) {
       console.error('Error sending message:', error);
     }
@@ -186,62 +198,83 @@ const MessagesTab = () => {
           const activeChat = messages.find(c => c.phone_number === selectedPhone);
           if (!activeChat) return null;
 
-          return (
-            <div className="flex-1 flex flex-col bg-[#F0F2F5]">
-              <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold">
-                    {activeChat.phone_number.slice(-2)}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-800">{activeChat.phone_number}</h4>
-                    <span className="text-xs text-green-500 font-medium">En línea</span>
-                  </div>
-                </div>
-                <MoreVertical className="text-slate-400 cursor-pointer" />
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {[...activeChat.messages].reverse().map((msg, i) => (
-                  <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
-                    <div className={`${msg.sender === 'user' ? 'bg-white text-slate-800' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-md`}>
-                      <p>{msg.message_content}</p>
-                      <div className="flex items-center justify-end gap-1 mt-1">
-                        <span className={`text-[10px] ${msg.sender === 'user' ? 'text-slate-400' : 'text-teal-100'}`}>
-                          {new Date(msg.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        {msg.sender === 'assistant' && <CheckCheck size={12} className="text-teal-100" />}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-slate-200">
-                <div className="flex gap-3 items-center">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Escribe un mensaje..."
-                    className="flex-1 bg-slate-100 rounded-full px-6 py-3 outline-none focus:ring-2 focus:ring-teal-500/20"
-                  />
-                  <button
-                    type="submit"
-                    className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 transition-colors"
-                  >
-                    <Send size={20} />
-                  </button>
-                </div>
-              </form>
-            </div>
-          );
+          // Scroll to bottom whenever activeChat changes
+          // Use a key-based effect to handle scrolling
+          return <ChatWindow
+            activeChat={activeChat}
+            newMessage={newMessage}
+            setNewMessage={setNewMessage}
+            handleSendMessage={handleSendMessage}
+            messagesEndRef={messagesEndRef}
+          />;
         })()
       ) : (
         <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400">
           Selecciona un chat para empezar
         </div>
       )}
+    </div>
+  );
+};
+
+// Extracted ChatWindow for better state/scroll management
+const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, messagesEndRef }) => {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [activeChat.messages.length]);
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#F0F2F5]">
+      <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold">
+            {activeChat.phone_number.slice(-2)}
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-800">{activeChat.phone_number}</h4>
+            <span className="text-xs text-green-500 font-medium whitespace-nowrap overflow-hidden">
+              <span className="inline-block animate-pulse w-2 h-2 bg-green-500 rounded-full mr-1" />
+              En línea
+            </span>
+          </div>
+        </div>
+        <MoreVertical className="text-slate-400 cursor-pointer" />
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {[...activeChat.messages].reverse().map((msg, i) => (
+          <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
+            <div className={`${msg.sender === 'user' ? 'bg-white text-slate-800' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-md`}>
+              <p>{msg.message_content}</p>
+              <div className="flex items-center justify-end gap-1 mt-1">
+                <span className={`text-[10px] ${msg.sender === 'user' ? 'text-slate-400' : 'text-teal-100'}`}>
+                  {new Date(msg.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                {msg.sender === 'assistant' && <CheckCheck size={12} className="text-teal-100" />}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-slate-200">
+        <div className="flex gap-3 items-center">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Escribe un mensaje..."
+            className="flex-1 bg-slate-100 rounded-full px-6 py-3 outline-none focus:ring-2 focus:ring-teal-500/20"
+          />
+          <button
+            type="submit"
+            className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 transition-colors"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      </form>
     </div>
   );
 };
