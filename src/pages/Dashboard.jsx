@@ -727,7 +727,7 @@ function CalendarTab() {
         api.getAppointments()
       ]);
       setAvailability(slots);
-      setAppointments(appts);
+      setAppointments(appts.data);
     } catch (error) {
       console.error('Error loading calendar:', error);
     } finally {
