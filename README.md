@@ -12,7 +12,6 @@ Erika IA es una plataforma de gestión para clínicas estéticas que incluye un 
 
 - `src/`: Frontend en React + Vite + Tailwind CSS.
 - `server/`: Backend local en Node.js + Express + SQLite.
-- `supabase/`: Funciones Edge de Supabase para la integración con WhatsApp.
 
 ## Configuración
 
@@ -30,4 +29,4 @@ Erika IA es una plataforma de gestión para clínicas estéticas que incluye un 
    Esto iniciará tanto el frontend (5173) como el backend (3001).
 
 4. **Integración con WhatsApp**:
-   - Debes configurar el webhook de Twilio hacia la función de Supabase o exponer tu servidor local mediante `ngrok`.
+   - Debes exponer tu servidor local mediante `ngrok` y configurar el webhook de Twilio hacia esa URL.

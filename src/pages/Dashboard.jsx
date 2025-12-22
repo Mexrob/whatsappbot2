@@ -600,7 +600,7 @@ const SettingsTab = ({ settings, onUpdate }) => {
                 type="text"
                 value={formData.whatsapp_webhook_url}
                 onChange={(e) => setFormData({ ...formData, whatsapp_webhook_url: e.target.value })}
-                placeholder="https://tu-funcion.supabase.co/functions/v1/twilio-webhook"
+                placeholder="https://tu-url-ngrok.ngrok-free.dev/api/webhook/whatsapp"
                 className="w-full px-4 py-2 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-teal-500/20"
               />
             </div>
