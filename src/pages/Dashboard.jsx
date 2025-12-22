@@ -116,7 +116,7 @@ const Dashboard = ({ onLogout }) => {
         <div className="mt-auto pt-4 border-t border-slate-100 pb-2">
           <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
           <div className="px-4 py-2 bg-slate-50 rounded-xl mx-2">
-            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-23:15 Mobile-Ready</p>
+            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-23:30 Mobile-Fixed</p>
             <div className="flex items-center gap-1.5 mb-2">
               <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
               <p className="text-[10px] text-teal-600 font-bold">Auto-Sync: Activado</p>
@@ -196,7 +196,7 @@ const MessagesTab = () => {
       const chatList = Object.values(groups);
       setMessages(chatList);
 
-      if (chatList.length > 0 && !selectedPhone) {
+      if (chatList.length > 0 && !selectedPhone && window.innerWidth >= 768) {
         setSelectedPhone(chatList[0].phone_number);
       }
     } catch (error) {
