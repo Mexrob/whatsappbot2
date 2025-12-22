@@ -330,28 +330,32 @@ async function sendWhatsAppMessage(to, body) {
 setInterval(() => {
   console.log('Checking for appointment reminders...');
   try {
-    // Logic: Find appointments happening in roughly 24 hours (between 23h and 25h from now)
-    // that haven't had a reminder sent yet.
+    // Logic: Catch-up mode. Find ANY appointment in the next 24 hours 
+    // that hasn't had a reminder sent yet. This covers "tomorrow" and "today" (if late booking).
     const reminders = db.prepare(`
       SELECT * FROM appointments 
-      WHERE appointment_date BETWEEN datetime('now', '+23 hours') AND datetime('now', '+25 hours') 
+      WHERE appointment_date > datetime('now') 
+      AND appointment_date < datetime('now', '+24 hours') 
       AND reminder_sent = 0 
       AND status = 'confirmed'
     `).all();
 
     if (reminders.length > 0) {
-      console.log(`Found ${reminders.length} appointments to remind.`);
+      console.log(`Found ${reminders.length} pending reminders.`);
     }
 
     reminders.forEach(async (appt) => {
+      // Format: "lunes, 23 de diciembre, 02:00 p. m."
       const date = new Date(appt.appointment_date).toLocaleString('es-MX', {
         weekday: 'long',
+        day: 'numeric',
+        month: 'long',
         hour: 'numeric',
         minute: 'numeric',
         timeZone: 'America/Mexico_City'
       });
 
-      const message = `👋 Hola ${appt.patient_name}, paso a recordarte de parte de Erika AI que tienes una cita de ${appt.appointment_type} mañana ${date}. ¡Nos vemos pronto!`;
+      const message = `👋 Hola ${appt.patient_name}, paso a recordarte de parte de Erika AI que tienes una cita de ${appt.appointment_type} el ${date}. ¡Nos vemos pronto!`;
 
       // Send Message
       await sendWhatsAppMessage(appt.phone_number, message);
