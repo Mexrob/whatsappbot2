@@ -63,9 +63,17 @@ const Dashboard = ({ onLogout }) => {
           <SidebarItem id="settings" iconComponent={Settings} label="Configuración" activeTab={activeTab} onClick={setActiveTab} />
         </nav>
 
+        <div className="mt-auto pt-4 border-t border-slate-100 pb-2">
+          <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
+          <div className="px-4 py-2 bg-slate-50 rounded-xl mx-2">
+            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-21:55</p>
+            <p className="text-[10px] text-teal-600 font-bold">Auto-Sync: Activado</p>
+          </div>
+        </div>
+
         <button
           onClick={onLogout}
-          className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-red-500 transition-colors mt-auto"
+          className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-red-500 transition-colors mt-2"
         >
           <LogOut size={20} />
           <span className="font-medium">Cerrar Sesión</span>
