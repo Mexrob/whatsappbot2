@@ -89,7 +89,9 @@ const MessagesTab = () => {
 
   useEffect(() => {
     fetchMessages();
-  }, []);
+    const interval = setInterval(fetchMessages, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
+  }, [selectedChat?.phone_number]); // Re-run if selected chat changes to ensure sync
 
   const fetchMessages = async () => {
     try {
@@ -109,8 +111,17 @@ const MessagesTab = () => {
       }, {});
       const chatList = Object.values(groups);
       setMessages(chatList);
-      if (chatList.length > 0 && !selectedChat) {
-        setSelectedChat(chatList[0]);
+
+      if (chatList.length > 0) {
+        if (!selectedChat) {
+          setSelectedChat(chatList[0]);
+        } else {
+          // Update current selected chat with new messages
+          const updatedSelected = chatList.find(c => c.phone_number === selectedChat.phone_number);
+          if (updatedSelected && updatedSelected.messages.length !== selectedChat.messages.length) {
+            setSelectedChat(updatedSelected);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -243,6 +254,8 @@ const AppointmentsTab = () => {
 
   useEffect(() => {
     fetchAppointments();
+    const interval = setInterval(fetchAppointments, 10000); // Poll every 10 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const fetchAppointments = async () => {
