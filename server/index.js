@@ -277,7 +277,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 });
 
 // Catch-all route to serve React index.html
-app.get('/:any*', (req, res) => {
+app.get('(.*)', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
