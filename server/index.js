@@ -27,6 +27,34 @@ app.post('/api/login', (req, res) => {
   }
 });
 
+// User Management
+app.get('/api/users', (req, res) => {
+  const users = db.prepare('SELECT id, email FROM users').all();
+  res.json(users);
+});
+
+app.post('/api/users', (req, res) => {
+  const { email, password } = req.body;
+  try {
+    db.prepare('INSERT INTO users (email, password) VALUES (?, ?)').run(email, password);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/users/:id', (req, res) => {
+  const { id } = req.params;
+  // Prevent deleting the last user or specific admin if restriction needed
+  // For now simple delete
+  try {
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Clinic Settings
 app.get('/api/settings', (req, res) => {
   const settings = db.prepare('SELECT * FROM clinic_settings WHERE id = 1').get();

@@ -12,4 +12,7 @@ export const api = {
   deleteAppointment: (id) => axios.delete(`${API_URL}/appointments/${id}`),
   getMessages: () => axios.get(`${API_URL}/messages?_t=${Date.now()}`),
   sendMessage: (msg) => axios.post(`${API_URL}/messages`, msg),
+  getUsers: () => axios.get(`${API_URL}/users`),
+  createUser: (user) => axios.post(`${API_URL}/users`, user),
+  deleteUser: (id) => axios.delete(`${API_URL}/users/${id}`),
 };
