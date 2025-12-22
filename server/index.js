@@ -280,21 +280,11 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
 
     // 5. Send via Twilio
-    const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
-    const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
-
-    await fetch(twilioUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: new URLSearchParams({
-        To: From,
-        From: process.env.TWILIO_PHONE_NUMBER,
-        Body: aiResponse
-      })
-    });
+    // Convert 'From' (e.g. whatsapp:+123) to plain number if helper expects it, 
+    // but helper expects 'to' and prepends 'whatsapp:'. 
+    // Wait, helper expects `to` to be JUST the number in `whatsapp:${to}` line.
+    // The `phoneNumber` var already has 'whatsapp:' stripped (line 135).
+    await sendWhatsAppMessage(phoneNumber, aiResponse);
 
     res.status(200).send('OK');
   } catch (error) {
@@ -307,6 +297,77 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
+
+// Helper: Send WhatsApp Message
+async function sendWhatsAppMessage(to, body) {
+  const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
+  const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+
+  try {
+    const response = await fetch(twilioUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        To: `whatsapp:${to}`,
+        From: process.env.TWILIO_PHONE_NUMBER,
+        Body: body
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Twilio API Error: ${response.statusText}`);
+    }
+    console.log(`Message sent to ${to}: ${body.substring(0, 20)}...`);
+  } catch (error) {
+    console.error('Error sending WhatsApp message:', error);
+  }
+}
+
+// Scheduler: Check for reminders every minute
+setInterval(() => {
+  console.log('Checking for appointment reminders...');
+  try {
+    // Logic: Find appointments happening in roughly 24 hours (between 23h and 25h from now)
+    // that haven't had a reminder sent yet.
+    const reminders = db.prepare(`
+      SELECT * FROM appointments 
+      WHERE appointment_date BETWEEN datetime('now', '+23 hours') AND datetime('now', '+25 hours') 
+      AND reminder_sent = 0 
+      AND status = 'confirmed'
+    `).all();
+
+    if (reminders.length > 0) {
+      console.log(`Found ${reminders.length} appointments to remind.`);
+    }
+
+    reminders.forEach(async (appt) => {
+      const date = new Date(appt.appointment_date).toLocaleString('es-MX', {
+        weekday: 'long',
+        hour: 'numeric',
+        minute: 'numeric',
+        timeZone: 'America/Mexico_City'
+      });
+
+      const message = `👋 Hola ${appt.patient_name}, paso a recordarte de parte de Erika AI que tienes una cita de ${appt.appointment_type} mañana ${date}. ¡Nos vemos pronto!`;
+
+      // Send Message
+      await sendWhatsAppMessage(appt.phone_number, message);
+
+      // Save as system message in chat history
+      db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
+        .run(appt.phone_number, message, 'assistant', new Date().toISOString());
+
+      // Mark as sent
+      db.prepare('UPDATE appointments SET reminder_sent = 1 WHERE id = ?').run(appt.id);
+    });
+
+  } catch (error) {
+    console.error('Error in reminder scheduler:', error);
+  }
+}, 60 * 1000); // Run every minute
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
