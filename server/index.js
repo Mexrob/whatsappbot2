@@ -75,6 +75,32 @@ app.put('/api/settings', (req, res) => {
   }
 });
 
+// Availability
+app.get('/api/availability', (req, res) => {
+  const slots = db.prepare('SELECT * FROM availability ORDER BY start_time ASC').all();
+  res.json(slots);
+});
+
+app.post('/api/availability', (req, res) => {
+  const { start_time, end_time } = req.body;
+  try {
+    const result = db.prepare('INSERT INTO availability (start_time, end_time) VALUES (?, ?)').run(start_time, end_time);
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/availability/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM availability WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Appointments
 app.get('/api/appointments', (req, res) => {
   const appointments = db.prepare('SELECT * FROM appointments ORDER BY appointment_date DESC').all();
@@ -156,11 +182,12 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     Usa un tono profesional, amable y estético. 
 
     REGLAS DE AGENDAMIENTO:
-    1. Si el usuario quiere una cita nueva, usa 'schedule_appointment'.
-    2. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
+    1. ANTES de ofrecer horarios, SIEMPRE usa 'get_available_slots' para saber qué hay libre.
+    2. Si el usuario quiere una cita nueva, usa 'schedule_appointment' SOLO si coincide con un horario disponible.
+    3. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
        - Primero usa 'get_my_appointments' para ver qué citas tiene activas.
        - Si tiene citas, pregúntale cuál quiere cambiar o usa 'reschedule_appointment' si hay una clara para cambiar.
-    3. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).`;
+    4. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).`;
 
     const contents = [
       ...history.reverse().map(m => ({
@@ -175,7 +202,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         function_declarations: [
           {
             name: "schedule_appointment",
-            description: "Registra una nueva cita médica en la base de datos",
+            description: "Registra una nueva cita médica (SOLO si el horario está disponible)",
             parameters: {
               type: "object",
               properties: {
@@ -185,6 +212,11 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
               },
               required: ["patient_name", "appointment_date", "appointment_type"]
             }
+          },
+          {
+            name: "get_available_slots",
+            description: "Consulta los horarios disponibles en la agenda para ofrecer al usuario",
+            parameters: { type: "object", properties: {} }
           },
           {
             name: "get_my_appointments",
@@ -240,9 +272,29 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         try {
           if (name === 'schedule_appointment') {
             const { patient_name, appointment_date, appointment_type } = args;
-            db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
-              .run(phoneNumber, patient_name, appointment_date, appointment_type);
-            aiResponse = `¡Perfecto! He agendado tu cita de ${appointment_type} para el ${new Date(appointment_date).toLocaleString('es-MX')}. ¿Te puedo ayudar en algo más?`;
+
+            // Validate Availability
+            const apptTime = new Date(appointment_date).getTime();
+            const valid = db.prepare('SELECT id FROM availability WHERE ? >= strftime("%s", start_time) * 1000 AND ? < strftime("%s", end_time) * 1000').get(apptTime, apptTime);
+
+            if (!valid) {
+              aiResponse = "Lo siento, ese horario ya no está disponible o no está abierto en nuestra agenda. ¿Te gustaría ver otras opciones?";
+            } else {
+              db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
+                .run(phoneNumber, patient_name, appointment_date, appointment_type);
+              aiResponse = `¡Perfecto! He agendado tu cita de ${appointment_type} para el ${new Date(appointment_date).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}. ¿Te puedo ayudar en algo más?`;
+            }
+          }
+          else if (name === 'get_available_slots') {
+            const slots = db.prepare("SELECT start_time FROM availability WHERE start_time > datetime('now', '-6 hours') ORDER BY start_time ASC LIMIT 10").all();
+            if (slots.length === 0) {
+              aiResponse = "Por el momento no tengo horarios disponibles en el sistema. Por favor, intenta contactar directamente a la clínica.";
+            } else {
+              const list = slots.map(s => {
+                return `- ${new Date(s.start_time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'short', hour: 'numeric', minute: 'numeric', timeZone: 'America/Mexico_City' })}`;
+              }).join('\n');
+              aiResponse = `Estos son los horarios que tengo libres próximamente:\n${list}\n¿Te queda bien alguno?`;
+            }
           }
           else if (name === 'get_my_appointments') {
             const appts = db.prepare("SELECT id, appointment_date, appointment_type FROM appointments WHERE phone_number = ? AND status != 'cancelled'").all(phoneNumber);

@@ -42,6 +42,12 @@ db.exec(`
     password TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS availability (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME NOT NULL
+  );
+
   -- Seed initial data
   INSERT OR IGNORE INTO clinic_settings (id, clinic_name, services) 
   VALUES (1, 'Erika Aesthetic Clinic', 'Limpieza Facial, Botox, Rellenos, Peeling');

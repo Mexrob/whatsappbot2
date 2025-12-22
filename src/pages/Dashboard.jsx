@@ -11,13 +11,19 @@ import {
   CheckCheck,
   Clock,
   User,
+  Users,
+  List,
   Plus,
   Menu,
   X,
   ArrowLeft,
+  ArrowRight,
   Moon,
   Sun,
-  Users
+  Trash2,
+  Trash,
+  Phone,
+  LayoutGrid
 } from 'lucide-react';
 
 const SidebarItem = ({ id, iconComponent: Icon, label, activeTab, onClick }) => ( // eslint-disable-line no-unused-vars
@@ -111,8 +117,18 @@ const Dashboard = ({ onLogout }) => {
           />
           <SidebarItem
             id="appointments"
-            iconComponent={Calendar}
+            iconComponent={List}
             label="Citas"
+            activeTab={activeTab}
+            onClick={(id) => {
+              setActiveTab(id);
+              setIsMobileMenuOpen(false);
+            }}
+          />
+          <SidebarItem
+            id="calendar"
+            iconComponent={Calendar}
+            label="Agenda"
             activeTab={activeTab}
             onClick={(id) => {
               setActiveTab(id);
@@ -178,10 +194,22 @@ const Dashboard = ({ onLogout }) => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden w-full pt-16 md:pt-0">
-        {activeTab === 'messages' && <MessagesTab />}
-        {activeTab === 'appointments' && <AppointmentsTab />}
-        {activeTab === 'settings' && <SettingsTab settings={settings} onUpdate={fetchSettings} />}
-        {activeTab === 'users' && <UsersTab />}
+        {(() => {
+          switch (activeTab) {
+            case 'messages':
+              return <MessagesTab />;
+            case 'appointments': // Citas List View
+              return <AppointmentsTab />;
+            case 'calendar': // Agenda Grid View
+              return <CalendarTab />;
+            case 'settings':
+              return <SettingsTab settings={settings} onUpdate={fetchSettings} />;
+            case 'users':
+              return <UsersTab />;
+            default:
+              return <MessagesTab />;
+          }
+        })()}
       </main>
     </div>
   );
@@ -672,6 +700,166 @@ const AppointmentsTab = () => {
     </div >
   );
 };
+
+// Calendar Component
+function CalendarTab() {
+  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [availability, setAvailability] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(currentWeek);
+    d.setDate(d.getDate() - d.getDay() + i); // Start from Sunday
+    return d;
+  });
+
+  useEffect(() => {
+    loadData();
+  }, [currentWeek]);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [slots, appts] = await Promise.all([
+        window.api.getAvailability(),
+        window.api.getAppointments()
+      ]);
+      setAvailability(slots);
+      setAppointments(appts);
+    } catch (error) {
+      console.error('Error loading calendar:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleSlot = async (date, hour) => {
+    const start = new Date(date);
+    start.setHours(hour, 0, 0, 0);
+    const startStr = start.toISOString();
+
+    const existingSlot = availability.find(s => {
+      const sTime = new Date(s.start_time).getTime();
+      return Math.abs(sTime - start.getTime()) < 1000;
+    });
+
+    if (existingSlot) {
+      await window.api.deleteAvailability(existingSlot.id);
+    } else {
+      const end = new Date(start);
+      end.setHours(hour + 1);
+      await window.api.addAvailability({
+        start_time: startStr,
+        end_time: end.toISOString()
+      });
+    }
+    loadData();
+  };
+
+  const nextWeek = () => {
+    const d = new Date(currentWeek);
+    d.setDate(d.getDate() + 7);
+    setCurrentWeek(d);
+  };
+
+  const prevWeek = () => {
+    const d = new Date(currentWeek);
+    d.setDate(d.getDate() - 7);
+    setCurrentWeek(d);
+  };
+
+  return (
+    <div className="p-8 h-full flex flex-col">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Agenda de Disponibilidad</h2>
+        <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700">
+          <button onClick={prevWeek} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+            <ArrowLeft size={20} />
+          </button>
+          <span className="font-bold text-slate-800 dark:text-white min-w-[150px] text-center">
+            {days[0].toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} - {days[6].toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })}
+          </span>
+          <button onClick={nextWeek} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300">
+            <ArrowRight size={20} />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative">
+        <div className="grid grid-cols-8 min-w-[800px] border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-800 z-10">
+          <div className="p-4 border-r border-slate-200 dark:border-slate-700"></div>
+          {days.map(d => (
+            <div key={d} className="p-4 text-center border-r border-slate-200 dark:border-slate-700 last:border-r-0">
+              <span className="block text-xs font-bold text-slate-400 uppercase">{d.toLocaleDateString('es-MX', { weekday: 'short' })}</span>
+              <span className={`block text-lg font-bold ${d.getDate() === new Date().getDate() ? 'text-teal-500' : 'text-slate-800 dark:text-white'}`}>
+                {d.getDate()}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-8 min-w-[800px]">
+          {hours.map(hour => (
+            <React.Fragment key={hour}>
+              <div className="p-4 text-xs font-semibold text-slate-400 border-r border-b border-slate-200 dark:border-slate-700 text-right sticky left-0 bg-white dark:bg-slate-800 z-10">
+                {hour}:00
+              </div>
+              {days.map(d => {
+                const cellTime = new Date(d);
+                cellTime.setHours(hour, 0, 0, 0);
+
+                // Check if slot is available
+                const isAvailable = availability.some(s => {
+                  const sTime = new Date(s.start_time).getTime();
+                  return Math.abs(sTime - cellTime.getTime()) < 1000;
+                });
+
+                // Check if there is an appointment (booked)
+                const appointment = appointments.find(a => {
+                  const aTime = new Date(a.appointment_date).getTime();
+                  // Check if appt is within this hour slot
+                  return aTime >= cellTime.getTime() && aTime < cellTime.getTime() + 3600000 && a.status !== 'cancelled';
+                });
+
+                return (
+                  <div
+                    key={d.toISOString() + hour}
+                    onClick={() => toggleSlot(d, hour)}
+                    className={`
+                      border-r border-b border-slate-200 dark:border-slate-700 h-20 p-1 transition-all cursor-pointer relative group
+                      ${isAvailable
+                        ? 'bg-green-50 dark:bg-green-900/10 hover:bg-green-100 dark:hover:bg-green-900/20'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}
+                    `}
+                  >
+                    {isAvailable && (
+                      <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-green-500" />
+                    )}
+
+                    {!isAvailable && (
+                      <div className="hidden group-hover:flex items-center justify-center h-full text-slate-300 dark:text-slate-600">
+                        <Plus size={16} />
+                      </div>
+                    )}
+
+                    {appointment && (
+                      <div className="absolute inset-1 bg-teal-100 dark:bg-teal-900/80 rounded-lg p-2 text-[10px] overflow-hidden border border-teal-200 dark:border-teal-700 shadow-sm z-10">
+                        <span className="font-bold text-teal-700 dark:text-teal-200 block truncate">{appointment.patient_name}</span>
+                        <span className="text-teal-600 dark:text-teal-300 block truncate">{appointment.appointment_type}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const SettingsTab = ({ settings, onUpdate }) => {
   const [formData, setFormData] = useState({

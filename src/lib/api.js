@@ -12,7 +12,46 @@ export const api = {
   deleteAppointment: (id) => axios.delete(`${API_URL}/appointments/${id}`),
   getMessages: () => axios.get(`${API_URL}/messages?_t=${Date.now()}`),
   sendMessage: (msg) => axios.post(`${API_URL}/messages`, msg),
-  getUsers: () => axios.get(`${API_URL}/users`),
-  createUser: (user) => axios.post(`${API_URL}/users`, user),
-  deleteUser: (id) => axios.delete(`${API_URL}/users/${id}`),
+  async getUsers() {
+    const res = await fetch(`${API_URL}/users`);
+    return res.json();
+  },
+
+  async createUser(data) {
+    const res = await fetch(`${API_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+
+  async deleteUser(id) {
+    const res = await fetch(`${API_URL}/users/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  },
+
+  // Availability
+  async getAvailability() {
+    const res = await fetch(`${API_URL}/availability`);
+    return res.json();
+  },
+
+  async addAvailability(data) {
+    const res = await fetch(`${API_URL}/availability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+
+  async deleteAvailability(id) {
+    const res = await fetch(`${API_URL}/availability/${id}`, {
+      method: 'DELETE',
+    });
+    return res.json();
+  }
 };
