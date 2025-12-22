@@ -330,12 +330,14 @@ async function sendWhatsAppMessage(to, body) {
 setInterval(() => {
   console.log('Checking for appointment reminders...');
   try {
-    // Logic: Catch-up mode. Find ANY appointment in the next 24 hours 
-    // that hasn't had a reminder sent yet. This covers "tomorrow" and "today" (if late booking).
+    // Logic: Catch-up mode adjusted for CDMX (-6h) and Format Normalization ('T' vs space).
+    // Stored dates are CDMX (e.g., 2025-12-23T14:00).
+    // Server time is UTC. We shift server time by -6h to compare apples to apples.
+    // We also use datetime(appointment_date) to ensure consistent format for comparison string-wise.
     const reminders = db.prepare(`
       SELECT * FROM appointments 
-      WHERE appointment_date > datetime('now') 
-      AND appointment_date < datetime('now', '+24 hours') 
+      WHERE datetime(appointment_date) > datetime('now', '-6 hours') 
+      AND datetime(appointment_date) < datetime('now', '-6 hours', '+24 hours') 
       AND reminder_sent = 0 
       AND status = 'confirmed'
     `).all();
