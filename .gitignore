@@ -22,5 +22,5 @@ server/ngrok
 ngrok
 
 # Others
-/node_modules
-/dist
+node_modules/
+dist/
