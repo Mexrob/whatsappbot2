@@ -11,7 +11,10 @@ import {
   CheckCheck,
   Clock,
   User,
-  Plus
+  Plus,
+  Menu,
+  X,
+  ArrowLeft
 } from 'lucide-react';
 
 const SidebarItem = ({ id, iconComponent: Icon, label, activeTab, onClick }) => ( // eslint-disable-line no-unused-vars
@@ -30,6 +33,7 @@ const SidebarItem = ({ id, iconComponent: Icon, label, activeTab, onClick }) => 
 const Dashboard = ({ onLogout }) => {
   const [activeTab, setActiveTab] = useState('messages');
   const [settings, setSettings] = useState(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -45,9 +49,28 @@ const Dashboard = ({ onLogout }) => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-slate-50 overflow-hidden relative">
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="md:hidden absolute top-4 left-4 z-50 p-2 bg-white rounded-lg shadow-sm border border-slate-200 text-slate-600"
+      >
+        {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
+
+      {/* Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col p-4">
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 flex flex-col p-4 transition-transform duration-300 md:relative md:translate-x-0
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
         <div className="flex items-center gap-3 px-4 mb-8">
           <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-200">
             <span className="text-white font-bold text-xl">E</span>
@@ -57,16 +80,43 @@ const Dashboard = ({ onLogout }) => {
           </h1>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          <SidebarItem id="messages" iconComponent={MessageSquare} label="Mensajes" activeTab={activeTab} onClick={setActiveTab} />
-          <SidebarItem id="appointments" iconComponent={Calendar} label="Citas" activeTab={activeTab} onClick={setActiveTab} />
-          <SidebarItem id="settings" iconComponent={Settings} label="Configuración" activeTab={activeTab} onClick={setActiveTab} />
+        <nav className="flex-1 space-y-2 mt-8 md:mt-0">
+          <SidebarItem
+            id="messages"
+            iconComponent={MessageSquare}
+            label="Mensajes"
+            activeTab={activeTab}
+            onClick={(id) => {
+              setActiveTab(id);
+              setIsMobileMenuOpen(false);
+            }}
+          />
+          <SidebarItem
+            id="appointments"
+            iconComponent={Calendar}
+            label="Citas"
+            activeTab={activeTab}
+            onClick={(id) => {
+              setActiveTab(id);
+              setIsMobileMenuOpen(false);
+            }}
+          />
+          <SidebarItem
+            id="settings"
+            iconComponent={Settings}
+            label="Configuración"
+            activeTab={activeTab}
+            onClick={(id) => {
+              setActiveTab(id);
+              setIsMobileMenuOpen(false);
+            }}
+          />
         </nav>
 
         <div className="mt-auto pt-4 border-t border-slate-100 pb-2">
           <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
           <div className="px-4 py-2 bg-slate-50 rounded-xl mx-2">
-            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-22:45 CDMX-Force</p>
+            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-23:15 Mobile-Ready</p>
             <div className="flex items-center gap-1.5 mb-2">
               <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
               <p className="text-[10px] text-teal-600 font-bold">Auto-Sync: Activado</p>
@@ -90,7 +140,7 @@ const Dashboard = ({ onLogout }) => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden w-full pt-16 md:pt-0">
         {activeTab === 'messages' && <MessagesTab />}
         {activeTab === 'appointments' && <AppointmentsTab />}
         {activeTab === 'settings' && <SettingsTab settings={settings} onUpdate={fetchSettings} />}
@@ -173,9 +223,12 @@ const MessagesTab = () => {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full relative">
       {/* Chat List */}
-      <div className="w-80 bg-white border-r border-slate-200 flex flex-col">
+      <div className={`
+        w-full md:w-80 bg-white border-r border-slate-200 flex flex-col absolute inset-0 z-10 md:static transition-transform duration-300
+        ${selectedPhone ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
+      `}>
         <div className="p-4 border-b border-slate-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -207,40 +260,47 @@ const MessagesTab = () => {
       </div>
 
       {/* Chat Window */}
-      {selectedPhone ? (
-        (() => {
-          const activeChat = messages.find(c => c.phone_number === selectedPhone);
-          if (!activeChat) return null;
+      <div className={`
+        flex-1 flex flex-col absolute inset-0 z-20 bg-slate-50 md:static transition-transform duration-300
+        ${selectedPhone ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
+      `}>
+        {selectedPhone ? (
+          (() => {
+            const activeChat = messages.find(c => c.phone_number === selectedPhone);
+            if (!activeChat) return null;
 
-          // Scroll to bottom whenever activeChat changes
-          // Use a key-based effect to handle scrolling
-          return <ChatWindow
-            activeChat={activeChat}
-            newMessage={newMessage}
-            setNewMessage={setNewMessage}
-            handleSendMessage={handleSendMessage}
-            messagesEndRef={messagesEndRef}
-          />;
-        })()
-      ) : (
-        <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400">
-          Selecciona un chat para empezar
-        </div>
-      )}
+            return <ChatWindow
+              activeChat={activeChat}
+              newMessage={newMessage}
+              setNewMessage={setNewMessage}
+              handleSendMessage={handleSendMessage}
+              messagesEndRef={messagesEndRef}
+              onBack={() => setSelectedPhone(null)}
+            />;
+          })()
+        ) : (
+          <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50 text-slate-400">
+            Selecciona un chat para empezar
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
 // Extracted ChatWindow for better state/scroll management
-const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, messagesEndRef }) => {
+const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, messagesEndRef, onBack }) => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeChat.messages.length]);
 
   return (
     <div className="flex-1 flex flex-col bg-[#F0F2F5]">
-      <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center">
+      <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center sticky top-0 z-10">
         <div className="flex items-center gap-3">
+          <button onClick={onBack} className="md:hidden text-slate-500 hover:text-slate-800">
+            <ArrowLeft size={24} />
+          </button>
           <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold">
             {activeChat.phone_number.slice(-2)}
           </div>
@@ -256,7 +316,7 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {activeChat.messages.map((msg, i) => (
+        {[...activeChat.messages].reverse().map((msg, i) => (
           <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
             <div className={`${msg.sender === 'user' ? 'bg-white text-slate-800' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-md`}>
               <p>{msg.message_content}</p>
@@ -403,92 +463,94 @@ const AppointmentsTab = () => {
         ))}
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm relative">
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm relative overflow-hidden">
         {activeMenu && (
           <div
             className="fixed inset-0 z-40"
             onClick={() => setActiveMenu(null)}
           />
         )}
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-100">
-            <tr>
-              <th className="px-6 py-4 text-sm font-bold text-slate-600">Paciente</th>
-              <th className="px-6 py-4 text-sm font-bold text-slate-600">Servicio</th>
-              <th className="px-6 py-4 text-sm font-bold text-slate-600">Fecha y Hora</th>
-              <th className="px-6 py-4 text-sm font-bold text-slate-600">Estado</th>
-              <th className="px-6 py-4 text-sm font-bold text-slate-600">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {appointments.map((appt) => (
-              <tr key={appt.id} className={`hover:bg-slate-50 transition-colors ${activeMenu === appt.id ? 'relative z-50' : ''}`}>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-xs">
-                      {appt.patient_name[0]}
-                    </div>
-                    <div>
-                      <span className="font-medium text-slate-800 block">{appt.patient_name}</span>
-                      <span className="text-[10px] text-slate-400">{appt.phone_number}</span>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 text-slate-600">{appt.appointment_type}</td>
-                <td className="px-6 py-4 text-slate-600">{new Date(appt.appointment_date).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${appt.status === 'confirmed' ? 'bg-green-100 text-green-600' :
-                    appt.status === 'cancelled' ? 'bg-red-100 text-red-600' :
-                      'bg-amber-100 text-amber-600'
-                    }`}>
-                    {appt.status === 'confirmed' ? 'Confirmada' :
-                      appt.status === 'cancelled' ? 'Cancelada' : 'Pendiente'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 relative">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveMenu(activeMenu === appt.id ? null : appt.id);
-                    }}
-                    className={`p-2 rounded-lg transition-colors relative z-50 ${activeMenu === appt.id ? 'bg-slate-100 text-teal-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
-                  >
-                    <MoreVertical size={18} />
-                  </button>
-
-                  {activeMenu === appt.id && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-[60] py-2 animate-in fade-in zoom-in duration-150 origin-top-right">
-                      <button
-                        onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-green-50 hover:text-green-600 flex items-center gap-2"
-                      >
-                        <div className="w-2 h-2 rounded-full bg-green-500" /> Confirmar Cita
-                      </button>
-                      <button
-                        onClick={() => handleUpdateStatus(appt.id, 'cancelled')}
-                        className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-amber-50 hover:text-amber-600 flex items-center gap-2"
-                      >
-                        <div className="w-2 h-2 rounded-full bg-amber-500" /> Cancelar Cita
-                      </button>
-                      <div className="h-[1px] bg-slate-100 my-1" />
-                      <button
-                        onClick={() => handleDelete(appt.id)}
-                        className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2"
-                      >
-                        Eliminar Registro
-                      </button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {appointments.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left min-w-[600px]">
+            <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                <td colSpan="5" className="px-6 py-8 text-center text-slate-500">No hay citas registradas</td>
+                <th className="px-6 py-4 text-sm font-bold text-slate-600">Paciente</th>
+                <th className="px-6 py-4 text-sm font-bold text-slate-600">Servicio</th>
+                <th className="px-6 py-4 text-sm font-bold text-slate-600">Fecha y Hora</th>
+                <th className="px-6 py-4 text-sm font-bold text-slate-600">Estado</th>
+                <th className="px-6 py-4 text-sm font-bold text-slate-600">Acciones</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {appointments.map((appt) => (
+                <tr key={appt.id} className={`hover:bg-slate-50 transition-colors ${activeMenu === appt.id ? 'relative z-50' : ''}`}>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center text-teal-600 font-bold text-xs">
+                        {appt.patient_name[0]}
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-800 block">{appt.patient_name}</span>
+                        <span className="text-[10px] text-slate-400">{appt.phone_number}</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-slate-600">{appt.appointment_type}</td>
+                  <td className="px-6 py-4 text-slate-600">{new Date(appt.appointment_date).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${appt.status === 'confirmed' ? 'bg-green-100 text-green-600' :
+                      appt.status === 'cancelled' ? 'bg-red-100 text-red-600' :
+                        'bg-amber-100 text-amber-600'
+                      }`}>
+                      {appt.status === 'confirmed' ? 'Confirmada' :
+                        appt.status === 'cancelled' ? 'Cancelada' : 'Pendiente'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMenu(activeMenu === appt.id ? null : appt.id);
+                      }}
+                      className={`p-2 rounded-lg transition-colors relative z-50 ${activeMenu === appt.id ? 'bg-slate-100 text-teal-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
+                    >
+                      <MoreVertical size={18} />
+                    </button>
+
+                    {activeMenu === appt.id && (
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-[60] py-2 animate-in fade-in zoom-in duration-150 origin-top-right">
+                        <button
+                          onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-green-50 hover:text-green-600 flex items-center gap-2"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-green-500" /> Confirmar Cita
+                        </button>
+                        <button
+                          onClick={() => handleUpdateStatus(appt.id, 'cancelled')}
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-amber-50 hover:text-amber-600 flex items-center gap-2"
+                        >
+                          <div className="w-2 h-2 rounded-full bg-amber-500" /> Cancelar Cita
+                        </button>
+                        <div className="h-[1px] bg-slate-100 my-1" />
+                        <button
+                          onClick={() => handleDelete(appt.id)}
+                          className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2"
+                        >
+                          Eliminar Registro
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {appointments.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-slate-500">No hay citas registradas</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {
