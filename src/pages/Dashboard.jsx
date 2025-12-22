@@ -11,7 +11,6 @@ import {
   CheckCheck,
   Clock,
   User,
-  User,
   Plus,
   Menu,
   X,
