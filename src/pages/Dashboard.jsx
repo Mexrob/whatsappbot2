@@ -723,8 +723,8 @@ function CalendarTab() {
     setLoading(true);
     try {
       const [slots, appts] = await Promise.all([
-        window.api.getAvailability(),
-        window.api.getAppointments()
+        api.getAvailability(),
+        api.getAppointments()
       ]);
       setAvailability(slots);
       setAppointments(appts);
@@ -746,11 +746,11 @@ function CalendarTab() {
     });
 
     if (existingSlot) {
-      await window.api.deleteAvailability(existingSlot.id);
+      await api.deleteAvailability(existingSlot.id);
     } else {
       const end = new Date(start);
       end.setHours(hour + 1);
-      await window.api.addAvailability({
+      await api.addAvailability({
         start_time: startStr,
         end_time: end.toISOString()
       });
