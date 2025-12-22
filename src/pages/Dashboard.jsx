@@ -66,8 +66,11 @@ const Dashboard = ({ onLogout }) => {
         <div className="mt-auto pt-4 border-t border-slate-100 pb-2">
           <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
           <div className="px-4 py-2 bg-slate-50 rounded-xl mx-2">
-            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-22:00</p>
-            <p className="text-[10px] text-teal-600 font-bold mb-2">Auto-Sync: Activado</p>
+            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-22:15</p>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
+              <p className="text-[10px] text-teal-600 font-bold">Auto-Sync: Activado</p>
+            </div>
             <button
               onClick={() => window.location.reload()}
               className="w-full py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
@@ -242,7 +245,7 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {[...activeChat.messages].reverse().map((msg, i) => (
+        {activeChat.messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
             <div className={`${msg.sender === 'user' ? 'bg-white text-slate-800' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-md`}>
               <p>{msg.message_content}</p>
