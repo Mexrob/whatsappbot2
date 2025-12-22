@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const path = require('path');
 require('dotenv').config({ path: '../.env' });
 const db = require('./db');
 
@@ -11,6 +12,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Serve static files from React build
+app.use(express.static(path.join(__dirname, '../dist')));
 
 // Auth Routes
 app.post('/api/login', (req, res) => {
@@ -270,6 +274,11 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     console.error('Webhook Error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Catch-all route to serve React index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
 app.listen(PORT, () => {
