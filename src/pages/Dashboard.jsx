@@ -84,14 +84,14 @@ const Dashboard = ({ onLogout }) => {
 
 const MessagesTab = () => {
   const [messages, setMessages] = useState([]);
-  const [selectedChat, setSelectedChat] = useState(null);
+  const [selectedPhone, setSelectedPhone] = useState(null);
   const [newMessage, setNewMessage] = useState('');
 
   useEffect(() => {
     fetchMessages();
     const interval = setInterval(fetchMessages, 5000); // Poll every 5 seconds
     return () => clearInterval(interval);
-  }, [selectedChat?.phone_number]); // Re-run if selected chat changes to ensure sync
+  }, []); // Poll independently of selection
 
   const fetchMessages = async () => {
     try {
@@ -112,16 +112,8 @@ const MessagesTab = () => {
       const chatList = Object.values(groups);
       setMessages(chatList);
 
-      if (chatList.length > 0) {
-        if (!selectedChat) {
-          setSelectedChat(chatList[0]);
-        } else {
-          // Update current selected chat with new messages
-          const updatedSelected = chatList.find(c => c.phone_number === selectedChat.phone_number);
-          if (updatedSelected && updatedSelected.messages.length !== selectedChat.messages.length) {
-            setSelectedChat(updatedSelected);
-          }
-        }
+      if (chatList.length > 0 && !selectedPhone) {
+        setSelectedPhone(chatList[0].phone_number);
       }
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -130,11 +122,11 @@ const MessagesTab = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedChat) return;
+    if (!newMessage.trim() || !selectedPhone) return;
 
     try {
       await api.sendMessage({
-        phone_number: selectedChat.phone_number,
+        phone_number: selectedPhone,
         message_content: newMessage,
         sender: 'assistant'
       });
@@ -163,74 +155,79 @@ const MessagesTab = () => {
           {messages.map((chat) => (
             <div
               key={chat.phone_number}
-              onClick={() => setSelectedChat(chat)}
-              className={`p-4 flex gap-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 ${selectedChat?.phone_number === chat.phone_number ? 'bg-slate-50' : ''}`}
+              onClick={() => setSelectedPhone(chat.phone_number)}
+              className={`p-4 border-b border-slate-50 cursor-pointer transition-colors ${selectedPhone === chat.phone_number ? 'bg-teal-50 border-r-4 border-r-teal-500' : 'hover:bg-slate-50'
+                }`}
             >
-              <div className="w-12 h-12 bg-teal-100 rounded-full flex-shrink-0 flex items-center justify-center text-teal-600 font-bold">
-                {chat.phone_number.slice(-2)}
+              <div className="flex justify-between items-start mb-1">
+                <h4 className={`font-bold ${selectedPhone === chat.phone_number ? 'text-teal-700' : 'text-slate-800'}`}>
+                  {chat.phone_number}
+                </h4>
+                <span className="text-[10px] text-slate-400">{chat.lastTime}</span>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start mb-1">
-                  <h4 className="font-bold text-slate-800 truncate">{chat.phone_number}</h4>
-                  <span className="text-xs text-slate-400">{chat.lastTime}</span>
-                </div>
-                <p className="text-sm text-slate-500 truncate">{chat.lastMessage}</p>
-              </div>
+              <p className="text-sm text-slate-500 truncate">{chat.lastMessage}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Chat Window */}
-      {selectedChat ? (
-        <div className="flex-1 flex flex-col bg-[#F0F2F5]">
-          <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold">
-                {selectedChat.phone_number.slice(-2)}
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800">{selectedChat.phone_number}</h4>
-                <span className="text-xs text-green-500 font-medium">En línea</span>
-              </div>
-            </div>
-            <MoreVertical className="text-slate-400 cursor-pointer" />
-          </div>
+      {selectedPhone ? (
+        (() => {
+          const activeChat = messages.find(c => c.phone_number === selectedPhone);
+          if (!activeChat) return null;
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {[...selectedChat.messages].reverse().map((msg, i) => (
-              <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`${msg.sender === 'user' ? 'bg-white text-slate-800' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-md`}>
-                  <p>{msg.message_content}</p>
-                  <div className="flex items-center justify-end gap-1 mt-1">
-                    <span className={`text-[10px] ${msg.sender === 'user' ? 'text-slate-400' : 'text-teal-100'}`}>
-                      {new Date(msg.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    {msg.sender === 'assistant' && <CheckCheck size={12} className="text-teal-100" />}
+          return (
+            <div className="flex-1 flex flex-col bg-[#F0F2F5]">
+              <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center text-white font-bold">
+                    {activeChat.phone_number.slice(-2)}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-800">{activeChat.phone_number}</h4>
+                    <span className="text-xs text-green-500 font-medium">En línea</span>
                   </div>
                 </div>
+                <MoreVertical className="text-slate-400 cursor-pointer" />
               </div>
-            ))}
-          </div>
 
-          <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-slate-200">
-            <div className="flex gap-3 items-center">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Escribe un mensaje..."
-                className="flex-1 bg-slate-100 rounded-full px-6 py-3 outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
-              <button
-                type="submit"
-                className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 transition-colors"
-              >
-                <Send size={20} />
-              </button>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {[...activeChat.messages].reverse().map((msg, i) => (
+                  <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
+                    <div className={`${msg.sender === 'user' ? 'bg-white text-slate-800' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-md`}>
+                      <p>{msg.message_content}</p>
+                      <div className="flex items-center justify-end gap-1 mt-1">
+                        <span className={`text-[10px] ${msg.sender === 'user' ? 'text-slate-400' : 'text-teal-100'}`}>
+                          {new Date(msg.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        {msg.sender === 'assistant' && <CheckCheck size={12} className="text-teal-100" />}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <form onSubmit={handleSendMessage} className="p-4 bg-white border-t border-slate-200">
+                <div className="flex gap-3 items-center">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Escribe un mensaje..."
+                    className="flex-1 bg-slate-100 rounded-full px-6 py-3 outline-none focus:ring-2 focus:ring-teal-500/20"
+                  />
+                  <button
+                    type="submit"
+                    className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 transition-colors"
+                  >
+                    <Send size={20} />
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
-        </div>
+          );
+        })()
       ) : (
         <div className="flex-1 flex items-center justify-center bg-slate-50 text-slate-400">
           Selecciona un chat para empezar
