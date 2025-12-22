@@ -66,7 +66,7 @@ const Dashboard = ({ onLogout }) => {
         <div className="mt-auto pt-4 border-t border-slate-100 pb-2">
           <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
           <div className="px-4 py-2 bg-slate-50 rounded-xl mx-2">
-            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-22:30 UTC-Sync</p>
+            <p className="text-[10px] text-slate-500 font-mono">Build: 22/12-22:45 CDMX-Force</p>
             <div className="flex items-center gap-1.5 mb-2">
               <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
               <p className="text-[10px] text-teal-600 font-bold">Auto-Sync: Activado</p>
@@ -119,7 +119,11 @@ const MessagesTab = () => {
     if (!dateStr) return '';
     // Ensure the date is interpreted as UTC by adding Z if not present
     const utcStr = dateStr.includes('T') ? (dateStr.endsWith('Z') ? dateStr : dateStr + 'Z') : dateStr.replace(' ', 'T') + 'Z';
-    return new Date(utcStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(utcStr).toLocaleTimeString('es-MX', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Mexico_City'
+    });
   };
 
   const fetchMessages = async () => {
@@ -261,7 +265,11 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
                   {(() => {
                     const dateStr = msg.received_at;
                     const utcStr = dateStr.includes('T') ? (dateStr.endsWith('Z') ? dateStr : dateStr + 'Z') : dateStr.replace(' ', 'T') + 'Z';
-                    return new Date(utcStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    return new Date(utcStr).toLocaleTimeString('es-MX', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: 'America/Mexico_City'
+                    });
                   })()}
                 </span>
                 {msg.sender === 'assistant' && <CheckCheck size={12} className="text-teal-100" />}
@@ -427,7 +435,7 @@ const AppointmentsTab = () => {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-slate-600">{appt.appointment_type}</td>
-                <td className="px-6 py-4 text-slate-600">{new Date(appt.appointment_date).toLocaleString()}</td>
+                <td className="px-6 py-4 text-slate-600">{new Date(appt.appointment_date).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</td>
                 <td className="px-6 py-4">
                   <span className={`px-3 py-1 rounded-full text-[10px] font-bold ${appt.status === 'confirmed' ? 'bg-green-100 text-green-600' :
                     appt.status === 'cancelled' ? 'bg-red-100 text-red-600' :
