@@ -91,8 +91,8 @@ app.post('/api/messages', (req, res) => {
   console.log('DEBUG: Received message save request:', req.body);
   const { phone_number, message_content, sender } = req.body;
   try {
-    const result = db.prepare('INSERT INTO messages (phone_number, message_content, sender) VALUES (?, ?, ?)')
-      .run(phone_number, message_content, sender);
+    db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
+      .run(phone_number, message_content, sender, new Date().toISOString());
     console.log('DEBUG: Message save result:', result);
     res.json({ success: true });
   } catch (error) {
@@ -109,8 +109,8 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
   try {
     console.log('Webhook triggered. From:', From, 'Body:', Body);
     // 1. Save user message
-    db.prepare('INSERT INTO messages (phone_number, message_content, sender) VALUES (?, ?, ?)')
-      .run(phoneNumber, Body, 'user');
+    db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
+      .run(phoneNumber, Body, 'user', new Date().toISOString());
 
     // 2. Get Clinic Settings & History
     const settings = db.prepare('SELECT * FROM clinic_settings WHERE id = 1').get();
@@ -248,8 +248,8 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     console.log('Final AI Response:', aiResponse);
 
     // 4. Save AI message
-    db.prepare('INSERT INTO messages (phone_number, message_content, sender) VALUES (?, ?, ?)')
-      .run(phoneNumber, aiResponse, 'assistant');
+    db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
+      .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
 
     // 5. Send via Twilio
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
