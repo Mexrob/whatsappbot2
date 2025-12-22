@@ -108,7 +108,6 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
   try {
     console.log('Webhook triggered. From:', From, 'Body:', Body);
-    console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.substring(0, 10) + '...' : 'UNDEFINED');
     // 1. Save user message
     db.prepare('INSERT INTO messages (phone_number, message_content, sender) VALUES (?, ?, ?)')
       .run(phoneNumber, Body, 'user');
