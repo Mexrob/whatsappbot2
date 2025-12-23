@@ -24,3 +24,7 @@ ngrok
 # Others
 node_modules/
 dist/
+-e 
+# Environment files
+*.env
+*.env.*
