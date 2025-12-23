@@ -141,13 +141,25 @@ app.get('/api/messages', (req, res) => {
   res.json(messages);
 });
 
-app.post('/api/messages', (req, res) => {
+app.post('/api/messages', async (req, res) => {
   console.log('DEBUG: Received message save request:', req.body);
-  const { phone_number, message_content, sender } = req.body;
+  let { phone_number, message_content, sender } = req.body;
+
+  // Normalize Mexican phone numbers (+521... -> +52...)
+  if (phone_number.startsWith('+521') && phone_number.length === 14) {
+    phone_number = '+52' + phone_number.substring(4);
+  }
+
   try {
+    // Save message to database
     db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
       .run(phone_number, message_content, sender, new Date().toISOString());
-    console.log('DEBUG: Message save result:', result);
+
+    // If sender is assistant (admin), send via WhatsApp
+    if (sender === 'assistant') {
+      await sendWhatsAppMessage(phone_number, message_content);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('DEBUG: Database Error during message save:', error);
@@ -158,10 +170,15 @@ app.post('/api/messages', (req, res) => {
 // WhatsApp Webhook (Local version)
 app.post('/api/webhook/whatsapp', async (req, res) => {
   const { Body, From } = req.body;
-  const phoneNumber = From.replace('whatsapp:', '');
+  let phoneNumber = From.replace('whatsapp:', '');
+
+  // Normalize Mexican phone numbers (+521... -> +52...)
+  if (phoneNumber.startsWith('+521') && phoneNumber.length === 14) {
+    phoneNumber = '+52' + phoneNumber.substring(4);
+  }
 
   try {
-    console.log('Webhook triggered. From:', From, 'Body:', Body);
+    console.log('Webhook triggered. From:', From, 'Body:', Body, '(Normalized to:', phoneNumber, ')');
     // 1. Save user message
     db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
       .run(phoneNumber, Body, 'user', new Date().toISOString());
@@ -173,6 +190,14 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
     const localTime = new Date().toLocaleString('es-MX', { timeZone: settings.timezone });
 
+    // Check if last assistant message contained available slots
+    const lastAssistantMsg = history.find(m => m.sender === 'assistant');
+    const justShownSlots = lastAssistantMsg && (
+      lastAssistantMsg.message_content.includes('horarios que tengo libres') ||
+      lastAssistantMsg.message_content.includes('Estos son los horarios') ||
+      lastAssistantMsg.message_content.includes('¿Te queda bien alguno?')
+    );
+
     // 3. Call Gemini
     const systemPrompt = `Eres Erika, la asistente virtual de la clínica ${settings.clinic_name}. 
     Tu objetivo es agendar citas, reprogramarlas y resolver dudas. 
@@ -181,23 +206,33 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     Dirección: ${settings.clinic_address}.
     Usa un tono profesional, amable y estético. 
 
-    REGLAS DE AGENDAMIENTO:
-    1. ANTES de ofrecer horarios por primera vez, usa la función 'get_available_slots' para saber qué hay libre.
-    2. Si YA mostraste los horarios disponibles en el mensaje anterior, NO vuelvas a llamar 'get_available_slots'.
-    3. Si el usuario menciona un día/hora que acabas de mostrar (ej: "sábado 27 a las 11"), NO llames ninguna función, solo responde con texto pidiendo el nombre.
-    4. ANTES de agendar, SIEMPRE pregunta el nombre completo del paciente si no lo sabes (responde con texto, NO llames ninguna función).
-    5. Para agendar usa la función 'schedule_appointment' SOLO cuando:
+    REGLAS CRÍTICAS DE AGENDAMIENTO:
+    1. FLUJO NORMAL DE AGENDAMIENTO:
+       a) Primera vez: Usa 'get_available_slots' para mostrar horarios disponibles
+       b) Usuario elige horario: Responde SOLO CON TEXTO pidiendo su nombre (NO llames ninguna función)
+       c) Usuario da su nombre: Usa 'schedule_appointment' para confirmar la cita
+    
+    2. ${justShownSlots ? '⚠️ ACABAS DE MOSTRAR HORARIOS EN TU ÚLTIMO MENSAJE. Si el usuario confirma uno (ej: "Sí, sábado 27 a las 11"), NO llames get_available_slots de nuevo. Solo pide su nombre con texto.' : 'Si necesitas mostrar horarios, usa get_available_slots.'}
+    
+    3. NUNCA llames funciones cuando solo necesitas pedir información al usuario (como su nombre).
+    
+    4. Para agendar usa 'schedule_appointment' SOLO cuando:
        - Ya tengas el nombre completo del paciente
        - Ya tengas el horario específico que el usuario eligió
        - El horario coincida con un slot disponible que mostraste
-    6. Si el usuario dice algo como "el sábado" o "sábado 27 a las 11", interpreta la hora en formato de 12 horas (11:00 AM).
-    7. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
-       - Primero usa 'get_my_appointments' para ver qué citas tiene activas.
-       - Si tiene citas, pregúntale cuál quiere cambiar o usa 'reschedule_appointment' si hay una clara para cambiar.
-    8. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
-    9. NUNCA uses placeholders como "[Nombre del paciente]" - siempre usa el nombre real que te dé el usuario.
-    10. Sé concisa. Si el usuario ya eligió un horario, solo pide el nombre (CON TEXTO, no llames ninguna función).
-    11. NO llames funciones innecesariamente. Si solo necesitas pedir información al usuario, responde con texto normal.`;
+    
+    5. Si el usuario dice algo como "sí", "sí me queda bien", "sábado 27 a las 11", etc., después de ver horarios:
+       - NO llames ninguna función
+       - Responde con texto: "¡Perfecto! ¿Cuál es tu nombre completo?"
+    
+    6. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
+       - Primero usa 'get_my_appointments' para ver qué citas tiene activas
+    
+    7. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
+    
+    8. NUNCA uses placeholders como "[Nombre del paciente]" - siempre usa el nombre real.
+    
+    9. Sé concisa y natural en tus respuestas.`;
 
     const contents = [
       ...history.reverse().map(m => ({
@@ -249,7 +284,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       }
     ];
 
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -386,6 +421,13 @@ async function sendWhatsAppMessage(to, body) {
   const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
 
+  // WhatsApp Mexican mobile rules: +52 1 [10 digits]
+  let formattedTo = to;
+  if (to.startsWith('+52') && !to.startsWith('+521') && to.length === 13) {
+    formattedTo = '+521' + to.substring(3);
+    console.log(`Normalizing Mexican number for Twilio: ${to} -> ${formattedTo}`);
+  }
+
   try {
     const response = await fetch(twilioUrl, {
       method: 'POST',
@@ -394,16 +436,19 @@ async function sendWhatsAppMessage(to, body) {
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: new URLSearchParams({
-        To: `whatsapp:${to}`,
+        To: `whatsapp:${formattedTo}`,
         From: process.env.TWILIO_PHONE_NUMBER,
         Body: body
       })
     });
 
+    const data = await response.json();
+
     if (!response.ok) {
-      throw new Error(`Twilio API Error: ${response.statusText}`);
+      console.error('Twilio API Error Details:', data);
+      throw new Error(`Twilio API Error: ${data.message || response.statusText}`);
     }
-    console.log(`Message sent to ${to}: ${body.substring(0, 20)}...`);
+    console.log(`Message successfully sent to ${formattedTo}. SID: ${data.sid}`);
   } catch (error) {
     console.error('Error sending WhatsApp message:', error);
   }

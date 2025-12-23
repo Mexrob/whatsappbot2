@@ -219,11 +219,12 @@ const MessagesTab = () => {
   const [messages, setMessages] = useState([]);
   const [selectedPhone, setSelectedPhone] = useState(null);
   const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef(null);
+  const selectedPhoneRef = useRef(selectedPhone);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  // Track selectedPhone in a ref to avoid stale closures in setInterval
+  useEffect(() => {
+    selectedPhoneRef.current = selectedPhone;
+  }, [selectedPhone]);
 
   useEffect(() => {
     fetchMessages();
@@ -231,9 +232,15 @@ const MessagesTab = () => {
     return () => clearInterval(interval);
   }, []); // Poll independently of selection
 
+  // Separate effect for default selection on desktop
+  useEffect(() => {
+    if (messages.length > 0 && !selectedPhone && window.innerWidth >= 768) {
+      setSelectedPhone(messages[0].phone_number);
+    }
+  }, [messages, selectedPhone]);
+
   const formatTime = (dateStr) => {
     if (!dateStr) return '';
-    // Ensure the date is interpreted as UTC by adding Z if not present
     const utcStr = dateStr.includes('T') ? (dateStr.endsWith('Z') ? dateStr : dateStr + 'Z') : dateStr.replace(' ', 'T') + 'Z';
     return new Date(utcStr).toLocaleTimeString('es-MX', {
       hour: '2-digit',
@@ -243,10 +250,8 @@ const MessagesTab = () => {
   };
 
   const fetchMessages = async () => {
-    console.log('Polling for new messages... (' + new Date().toLocaleTimeString() + ')');
     try {
       const response = await api.getMessages();
-      // Group messages by phone number for the chat list
       const groups = response.data.reduce((acc, msg) => {
         if (!acc[msg.phone_number]) {
           acc[msg.phone_number] = {
@@ -261,10 +266,6 @@ const MessagesTab = () => {
       }, {});
       const chatList = Object.values(groups);
       setMessages(chatList);
-
-      if (chatList.length > 0 && !selectedPhone && window.innerWidth >= 768) {
-        setSelectedPhone(chatList[0].phone_number);
-      }
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
@@ -282,71 +283,87 @@ const MessagesTab = () => {
       });
       setNewMessage('');
       await fetchMessages();
-      setTimeout(scrollToBottom, 100);
     } catch (error) {
       console.error('Error sending message:', error);
     }
   };
 
   return (
-    <div className="flex h-full relative">
+    <div className="flex h-full w-full overflow-hidden bg-white dark:bg-slate-800">
       {/* Chat List */}
       <div className={`
-        w-full md:w-80 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col absolute inset-0 z-10 md:static transition-transform duration-300
-        ${selectedPhone ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
+        flex-col border-r border-slate-200 dark:border-slate-700 transition-all duration-300 ease-in-out
+        ${selectedPhone ? 'hidden md:flex' : 'flex'}
+        w-full md:w-80 h-full overflow-hidden
       `}>
-        <div className="p-4 border-b border-slate-100 dark:border-slate-700">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
               type="text"
               placeholder="Buscar chat..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-800 dark:text-white"
+              className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-800 dark:text-white"
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto">
-          {messages.map((chat) => (
-            <div
-              key={chat.phone_number}
-              onClick={() => setSelectedPhone(chat.phone_number)}
-              className={`p-4 border-b border-slate-50 dark:border-slate-700/50 cursor-pointer transition-colors ${selectedPhone === chat.phone_number ? 'bg-teal-50 dark:bg-teal-900/20 border-r-4 border-r-teal-500' : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
-                }`}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <h4 className={`font-bold ${selectedPhone === chat.phone_number ? 'text-teal-700 dark:text-teal-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                  {chat.phone_number}
-                </h4>
-                <span className="text-[10px] text-slate-400">{chat.lastTime}</span>
-              </div>
-              <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{chat.lastMessage}</p>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-800 custom-scrollbar">
+          {messages.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 text-sm">
+              No hay mensajes aún
             </div>
-          ))}
+          ) : (
+            messages.map((chat) => (
+              <div
+                key={chat.phone_number}
+                onClick={() => setSelectedPhone(chat.phone_number)}
+                className={`p-4 border-b border-slate-50 dark:border-slate-700/50 cursor-pointer transition-all ${selectedPhone === chat.phone_number
+                  ? 'bg-teal-50 dark:bg-teal-900/20 border-r-4 border-r-teal-500'
+                  : 'hover:bg-slate-50 dark:hover:bg-slate-700/30'
+                  }`}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <h4 className={`font-bold truncate pr-2 ${selectedPhone === chat.phone_number ? 'text-teal-700 dark:text-teal-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                    {chat.phone_number}
+                  </h4>
+                  <span className="text-[10px] text-slate-400 flex-shrink-0">{chat.lastTime}</span>
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{chat.lastMessage}</p>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
       {/* Chat Window */}
       <div className={`
-        flex-1 flex flex-col absolute inset-0 z-20 bg-slate-50 md:static transition-transform duration-300
-        ${selectedPhone ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
+        flex-1 flex-col h-full bg-slate-50 dark:bg-slate-950 transition-all duration-300 ease-in-out overflow-hidden
+        ${selectedPhone ? 'flex' : 'hidden md:flex'}
       `}>
         {selectedPhone ? (
           (() => {
             const activeChat = messages.find(c => c.phone_number === selectedPhone);
-            if (!activeChat) return null;
+            if (!activeChat) return (
+              <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-4 text-center">
+                <MessageSquare size={48} className="mb-4 opacity-20" />
+                <p>Cargando conversación...</p>
+              </div>
+            );
 
             return <ChatWindow
               activeChat={activeChat}
               newMessage={newMessage}
               setNewMessage={setNewMessage}
               handleSendMessage={handleSendMessage}
-              messagesEndRef={messagesEndRef}
               onBack={() => setSelectedPhone(null)}
             />;
           })()
         ) : (
-          <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50 text-slate-400">
-            Selecciona un chat para empezar
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 animate-in fade-in duration-500">
+            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+              <MessageSquare size={32} />
+            </div>
+            <p className="text-lg font-medium">Selecciona un chat para empezar</p>
+            <p className="text-sm opacity-60">Toca cualquier conversación a la izquierda</p>
           </div>
         )}
       </div>
@@ -355,14 +372,22 @@ const MessagesTab = () => {
 };
 
 // Extracted ChatWindow for better state/scroll management
-const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, messagesEndRef, onBack }) => {
+const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, onBack }) => {
+  const scrollRef = useRef(null);
+
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  };
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    scrollToBottom();
   }, [activeChat.messages.length]);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#F0F2F5] dark:bg-slate-950 transition-colors">
-      <div className="p-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center sticky top-0 z-10">
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#F0F2F5] dark:bg-slate-950 transition-colors">
+      <div className="p-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center shrink-0 z-10">
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="md:hidden text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white">
             <ArrowLeft size={24} />
@@ -372,8 +397,8 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
           </div>
           <div>
             <h4 className="font-bold text-slate-800 dark:text-white">{activeChat.phone_number}</h4>
-            <span className="text-xs text-green-500 font-medium whitespace-nowrap overflow-hidden">
-              <span className="inline-block animate-pulse w-2 h-2 bg-green-500 rounded-full mr-1" />
+            <span className="text-xs text-green-500 font-medium flex items-center gap-1">
+              <span className="inline-block animate-pulse w-2 h-2 bg-green-500 rounded-full" />
               En línea
             </span>
           </div>
@@ -381,11 +406,11 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
         <MoreVertical className="text-slate-400 cursor-pointer" />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 custom-scrollbar">
         {[...activeChat.messages].reverse().map((msg, i) => (
           <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
-            <div className={`${msg.sender === 'user' ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-md`}>
-              <p>{msg.message_content}</p>
+            <div className={`${msg.sender === 'user' ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-[85%] md:max-w-md transition-all`}>
+              <p className="text-sm md:text-base break-words">{msg.message_content}</p>
               <div className="flex items-center justify-end gap-1 mt-1">
                 <span className={`text-[10px] ${msg.sender === 'user' ? 'text-slate-400 dark:text-slate-500' : 'text-teal-100'}`}>
                   {(() => {
@@ -403,23 +428,23 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
             </div>
           </div>
         ))}
-        <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+      <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shrink-0">
         <div className="flex gap-3 items-center">
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Escribe un mensaje..."
-            className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full px-6 py-3 outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-800 dark:text-white dark:placeholder-slate-400"
+            className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full px-4 md:px-6 py-2 md:py-3 outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-800 dark:text-white dark:placeholder-slate-400 text-sm md:text-base"
           />
           <button
             type="submit"
-            className="w-12 h-12 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 transition-colors"
+            className="w-10 h-10 md:w-12 md:h-12 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 transition-colors shrink-0"
           >
-            <Send size={20} />
+            <Send size={18} className="md:hidden" />
+            <Send size={20} className="hidden md:block" />
           </button>
         </div>
       </form>
@@ -584,7 +609,7 @@ const AppointmentsTab = () => {
                     </button>
 
                     {activeMenu === appt.id && (
-                      <div className="fixed right-8 mt-2 w-48 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 z-[60] py-2 animate-in fade-in zoom-in duration-150 origin-top-right">
+                      <div className="absolute right-full mr-2 top-0 w-48 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 z-[60] py-2 animate-in fade-in zoom-in duration-150 origin-top-right">
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
                           className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 dark:hover:text-green-400 flex items-center gap-2"
