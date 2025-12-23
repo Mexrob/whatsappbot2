@@ -292,7 +292,18 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             } else {
               db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
                 .run(phoneNumber, patient_name, appointment_date, appointment_type);
-              aiResponse = `¡Perfecto! He agendado tu cita de ${appointment_type} para el ${new Date(appointment_date).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}. ¿Te puedo ayudar en algo más?`;
+
+              // Format the date correctly for CDMX timezone
+              // appointment_date comes as "2025-12-27T13:00" (naive, no timezone)
+              // We need to interpret it as CDMX time and display it as such
+              const apptDate = new Date(appointment_date + '-06:00'); // Explicitly mark as CDMX (UTC-6)
+              const formattedDate = apptDate.toLocaleString('es-MX', {
+                timeZone: 'America/Mexico_City',
+                dateStyle: 'long',
+                timeStyle: 'short'
+              });
+
+              aiResponse = `¡Perfecto! He agendado tu cita de ${appointment_type} para el ${formattedDate}. ¿Te puedo ayudar en algo más?`;
             }
           }
           else if (name === 'get_available_slots') {
