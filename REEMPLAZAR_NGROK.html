@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cómo Reemplazar Ngrok - Guía Visual</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            padding: 60px 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 20px;
+        }
+
+        .content {
+            padding: 60px 40px;
+        }
+
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 40px 0;
+        }
+
+        .comparison-box {
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .comparison-box.before {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border: 3px solid #dc2626;
+        }
+
+        .comparison-box.after {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border: 3px solid #10b981;
+        }
+
+        .comparison-box h3 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+
+        .comparison-box.before h3 {
+            color: #dc2626;
+        }
+
+        .comparison-box.after h3 {
+            color: #10b981;
+        }
+
+        .icon-big {
+            font-size: 5em;
+            margin: 20px 0;
+        }
+
+        .features {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+        }
+
+        .features li {
+            padding: 10px 0;
+            display: flex;
+            align-items: start;
+            gap: 10px;
+        }
+
+        .features.bad li::before {
+            content: '✗';
+            color: #dc2626;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .features.good li::before {
+            content: '✓';
+            color: #10b981;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .steps {
+            margin: 60px 0;
+        }
+
+        .step {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            padding: 30px;
+            border-radius: 15px;
+            margin: 20px 0;
+            border-left: 5px solid #f59e0b;
+            position: relative;
+            transition: transform 0.3s;
+        }
+
+        .step:hover {
+            transform: translateX(10px);
+        }
+
+        .step-number {
+            position: absolute;
+            left: -25px;
+            top: 20px;
+            width: 50px;
+            height: 50px;
+            background: #f59e0b;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+        }
+
+        .step h3 {
+            color: #f59e0b;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            margin-left: 40px;
+        }
+
+        .step p {
+            color: #64748b;
+            margin-left: 40px;
+        }
+
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            overflow-x: auto;
+            margin-left: 40px;
+        }
+
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 30px 0;
+            padding: 30px;
+            background: #f8fafc;
+            border-radius: 15px;
+        }
+
+        .flow-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .flow-box {
+            padding: 20px 30px;
+            border-radius: 10px;
+            background: white;
+            border: 2px solid #e2e8f0;
+            font-weight: 600;
+            color: #334155;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .flow-arrow {
+            font-size: 2em;
+            color: #f59e0b;
+        }
+
+        .section-title {
+            font-size: 2.5em;
+            color: #f59e0b;
+            text-align: center;
+            margin: 60px 0 30px;
+            position: relative;
+            padding-bottom: 15px;
+        }
+
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background: #f59e0b;
+            border-radius: 2px;
+        }
+
+        .timeline {
+            display: flex;
+            justify-content: space-around;
+            margin: 40px 0;
+            padding: 30px;
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-radius: 15px;
+        }
+
+        .timeline-item {
+            text-align: center;
+        }
+
+        .timeline-time {
+            font-size: 2em;
+            font-weight: bold;
+            color: #92400e;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .timeline-label {
+            color: #78350f;
+            font-size: 0.9em;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            padding: 30px;
+            border-radius: 15px;
+            border-left: 5px solid #2563eb;
+            margin: 30px 0;
+        }
+
+        .highlight-box h4 {
+            color: #1e40af;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+        }
+
+        .provider-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .provider-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s;
+        }
+
+        .provider-card:hover {
+            border-color: #f59e0b;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(245, 158, 11, 0.2);
+        }
+
+        .provider-card h5 {
+            color: #f59e0b;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .price {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #10b981;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 768px) {
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 Cómo Reemplazar Ngrok</h1>
+            <p style="font-size: 1.2em; margin-top: 10px;">De Desarrollo Local a Producción Profesional</p>
+        </div>
+
+        <div class="content">
+            <!-- Comparison Section -->
+            <h2 class="section-title">📊 Comparación: Antes vs Después</h2>
+            
+            <div class="comparison">
+                <div class="comparison-box before">
+                    <h3>❌ CON NGROK</h3>
+                    <div class="icon-big">🏠</div>
+                    <p><strong>Desarrollo Local</strong></p>
+                    <ul class="features bad">
+                        <li>URL cambia cada reinicio</li>
+                        <li>Límite de 40 conexiones/min</li>
+                        <li>Sesiones expiran</li>
+                        <li>Dependencia externa</li>
+                        <li>No profesional</li>
+                        <li>Requiere tu PC encendida</li>
+                    </ul>
+                </div>
+
+                <div class="comparison-box after">
+                    <h3>✅ CON VPS</h3>
+                    <div class="icon-big">🚀</div>
+                    <p><strong>Producción Real</strong></p>
+                    <ul class="features good">
+                        <li>URL permanente personalizada</li>
+                        <li>Sin límites de conexiones</li>
+                        <li>24/7 disponible</li>
+                        <li>Control total</li>
+                        <li>Profesional con SSL</li>
+                        <li>Servidor dedicado siempre activo</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Time Required -->
+            <h2 class="section-title">⏱️ Tiempo Requerido</h2>
+            <div class="timeline">
+                <div class="timeline-item">
+                    <span class="timeline-time">5 min</span>
+                    <span class="timeline-label">Contratar VPS</span>
+                </div>
+                <div class="timeline-item">
+                    <span class="timeline-time">5 min</span>
+                    <span class="timeline-label">Configurar DNS</span>
+                </div>
+                <div class="timeline-item">
+                    <span class="timeline-time">10 min</span>
+                    <span class="timeline-label">Instalar & Configurar</span>
+                </div>
+                <div class="timeline-item">
+                    <span class="timeline-time">5 min</span>
+                    <span class="timeline-label">SSL & Testing</span>
+                </div>
+            </div>
+            <p style="text-align: center; font-size: 1.3em; color: #10b981; font-weight: bold;">
+                ⏰ Total: ~25 minutos
+            </p>
+
+            <!-- VPS Providers -->
+            <h2 class="section-title">🌐 VPS Recomendados</h2>
+            <div class="provider-grid">
+                <div class="provider-card">
+                    <h5>DigitalOcean</h5>
+                    <div class="price">$6/mes</div>
+                    <p>1GB RAM | 25GB SSD</p>
+                    <p style="color: #f59e0b;">⭐⭐⭐⭐⭐</p>
+                </div>
+                <div class="provider-card">
+                    <h5>Linode</h5>
+                    <div class="price">$5/mes</div>
+                    <p>1GB RAM | 25GB SSD</p>
+                    <p style="color: #f59e0b;">⭐⭐⭐⭐⭐</p>
+                </div>
+                <div class="provider-card">
+                    <h5>Vultr</h5>
+                    <div class="price">$6/mes</div>
+                    <p>1GB RAM | 25GB SSD</p>
+                    <p style="color: #f59e0b;">⭐⭐⭐⭐</p>
+                </div>
+                <div class="provider-card">
+                    <h5>Contabo</h5>
+                    <div class="price">€5/mes</div>
+                    <p>4GB RAM | 50GB SSD</p>
+                    <p style="color: #f59e0b;">⭐⭐⭐⭐</p>
+                </div>
+            </div>
+
+            <!-- Flow Diagrams -->
+            <h2 class="section-title">🔄 Flujo de Datos</h2>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin: 40px 0;">
+                <div>
+                    <h4 style="text-align: center; color: #dc2626; margin-bottom: 20px;">❌ ANTES (Ngrok)</h4>
+                    <div class="flow-diagram">
+                        <div class="flow-box">Cliente WhatsApp</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box">Twilio</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box" style="background: #fee2e2;">ngrok.io/abc123</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box" style="background: #fee2e2;">Tu PC (localhost:3001)</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box">Backend Node.js</div>
+                    </div>
+                </div>
+
+                <div>
+                    <h4 style="text-align: center; color: #10b981; margin-bottom: 20px;">✅ DESPUÉS (VPS)</h4>
+                    <div class="flow-diagram">
+                        <div class="flow-box">Cliente WhatsApp</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box">Twilio</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box" style="background: #d1fae5;">tu-dominio.com</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box" style="background: #d1fae5;">VPS + Nginx (SSL)</div>
+                        <div class="flow-arrow">↓</div>
+                        <div class="flow-box">Backend Node.js (PM2)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Steps -->
+            <h2 class="section-title">📝 Pasos del Proceso</h2>
+
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3>Contratar VPS y Dominio</h3>
+                    <p>Registra un VPS (DigitalOcean, Linode, etc.) y compra un dominio (Namecheap, Cloudflare, etc.)</p>
+                    <div class="code-block">
+# Ejemplo con DigitalOcean:
+1. Crear Droplet Ubuntu 22.04
+2. Specs: 1GB RAM, 1 vCPU, 25GB
+3. Anotar la IP pública: 123.45.67.89
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3>Configurar DNS del Dominio</h3>
+                    <p>Apunta tu dominio a la IP del VPS mediante registros DNS tipo A</p>
+                    <div class="code-block">
+# En tu proveedor de dominio:
+Tipo: A    Nombre: @      Valor: 123.45.67.89
+Tipo: A    Nombre: www    Valor: 123.45.67.89
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3>Instalar Software en VPS</h3>
+                    <p>Conecta por SSH e instala Node.js, Nginx, PM2 y Certbot</p>
+                    <div class="code-block">
+ssh root@123.45.67.89
+apt update && apt upgrade -y
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs nginx certbot python3-certbot-nginx
+npm install -g pm2
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h3>Subir el Proyecto al VPS</h3>
+                    <p>Clona tu repositorio o sube los archivos vía SCP/Git</p>
+                    <div class="code-block">
+git clone https://github.com/tu-usuario/erika-ai.git
+cd erika-ai
+npm install
+cd server && npm install && cd ..
+npm run build
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">5</div>
+                    <h3>Configurar Nginx como Proxy</h3>
+                    <p>Nginx redirige las peticiones del puerto 80/443 al backend en puerto 3001</p>
+                    <div class="code-block">
+# Copiar configuración
+cp nginx.conf.example /etc/nginx/sites-available/erika-ai
+nano /etc/nginx/sites-available/erika-ai  # Editar dominio
+ln -s /etc/nginx/sites-available/erika-ai /etc/nginx/sites-enabled/
+systemctl restart nginx
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">6</div>
+                    <h3>Iniciar Backend con PM2</h3>
+                    <p>PM2 mantiene tu aplicación corriendo 24/7, incluso después de reinicios</p>
+                    <div class="code-block">
+pm2 start server/index.js --name "erika-backend"
+pm2 save
+pm2 startup  # Ejecutar comando que muestra
+pm2 status
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">7</div>
+                    <h3>Configurar SSL (HTTPS)</h3>
+                    <p>Certbot instala automáticamente certificados SSL gratuitos de Let's Encrypt</p>
+                    <div class="code-block">
+certbot --nginx -d tu-dominio.com -d www.tu-dominio.com
+# Seguir wizard: email, aceptar términos, redirect HTTP->HTTPS
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">8</div>
+                    <h3>Actualizar Webhook de Twilio</h3>
+                    <p>Cambia la URL del webhook de ngrok a tu dominio permanente</p>
+                    <div class="code-block">
+ANTES: https://abc123.ngrok-free.app/api/webhook/whatsapp
+DESPUÉS: https://tu-dominio.com/api/webhook/whatsapp
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">9</div>
+                    <h3>Eliminar Ngrok del Proyecto</h3>
+                    <p>Ya no necesitas ngrok, puedes quitarlo del package.json</p>
+                    <div class="code-block">
+# En package.json, ELIMINAR:
+"dev:tunnel": "cd server && ./ngrok http 3001"
+
+# Y actualizar script dev:
+"dev": "concurrently \"npm run dev:client\" \"npm run dev:server\""
+                    </div>
+                </div>
+            </div>
+
+            <!-- What Changes -->
+            <h2 class="section-title">📝 ¿Qué Archivos Cambiar?</h2>
+
+            <div class="highlight-box">
+                <h4>1. package.json</h4>
+                <div class="code-block">
+// QUITAR esta línea:
+"dev:tunnel": "cd server && ./ngrok http 3001",
+
+// CAMBIAR de:
+"dev": "concurrently \"npm run dev:client\" \"npm run dev:server\" \"npm run dev:tunnel\"",
+
+// A:
+"dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <h4>2. Crear .env en el VPS</h4>
+                <div class="code-block">
+GEMINI_API_KEY=tu_api_key_real
+TWILIO_ACCOUNT_SID=ACxxxxx
+TWILIO_AUTH_TOKEN=xxxxxx
+TWILIO_PHONE_NUMBER=whatsapp:+14155238886
+PORT=3001
+NODE_ENV=production
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <h4>3. Configurar Nginx (archivo nuevo)</h4>
+                <div class="code-block">
+# /etc/nginx/sites-available/erika-ai
+server {
+    listen 80;
+    server_name tu-dominio.com;
+    
+    location /api {
+        proxy_pass http://localhost:3001;
+        proxy_set_header Host $host;
+    }
+    
+    location / {
+        root /ruta/a/erika-ai/dist;
+        try_files $uri /index.html;
+    }
+}
+                </div>
+            </div>
+
+            <div class="highlight-box">
+                <h4>4. Actualizar Twilio Webhook</h4>
+                <p style="margin-top: 15px;">En Twilio Console → Messaging → WhatsApp Sandbox Settings:</p>
+                <div class="code-block">
+Webhook URL: https://tu-dominio.com/api/webhook/whatsapp
+Method: POST
+                </div>
+            </div>
+
+            <!-- Final Notes -->
+            <h2 class="section-title">🎯 Resultado Final</h2>
+
+            <div style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); padding: 40px; border-radius: 15px; text-align: center; margin: 40px 0;">
+                <h3 style="color: #065f46; font-size: 2em; margin-bottom: 20px;">✅ ¡Tu App Está en Producción!</h3>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 30px;">
+                    <div>
+                        <div style="font-size: 3em; margin-bottom: 10px;">🌐</div>
+                        <p style="color: #065f46; font-weight: bold;">URL Permanente</p>
+                        <p style="color: #047857;">https://tu-dominio.com</p>
+                    </div>
+                    <div>
+                        <div style="font-size: 3em; margin-bottom: 10px;">🔒</div>
+                        <p style="color: #065f46; font-weight: bold;">SSL Habilitado</p>
+                        <p style="color: #047857;">Certificado Let's Encrypt</p>
+                    </div>
+                    <div>
+                        <div style="font-size: 3em; margin-bottom: 10px;">🚀</div>
+                        <p style="color: #065f46; font-weight: bold;">24/7 Disponible</p>
+                        <p style="color: #047857;">PM2 Auto-restart</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Commands -->
+            <h2 class="section-title">⚡ Comandos Rápidos</h2>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="highlight-box" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-color: #f59e0b;">
+                    <h4 style="color: #92400e;">Ver Logs</h4>
+                    <div class="code-block" style="background: #78350f;">pm2 logs erika-backend</div>
+                </div>
+
+                <div class="highlight-box" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-color: #f59e0b;">
+                    <h4 style="color: #92400e;">Reiniciar App</h4>
+                    <div class="code-block" style="background: #78350f;">pm2 restart erika-backend</div>
+                </div>
+
+                <div class="highlight-box" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-color: #f59e0b;">
+                    <h4 style="color: #92400e;">Ver Estado</h4>
+                    <div class="code-block" style="background: #78350f;">pm2 status</div>
+                </div>
+
+                <div class="highlight-box" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-color: #f59e0b;">
+                    <h4 style="color: #92400e;">Actualizar Código</h4>
+                    <div class="code-block" style="background: #78350f;">./deploy.sh</div>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 60px; padding: 40px; background: #f8fafc; border-radius: 15px;">
+                <h3 style="color: #f59e0b; font-size: 1.8em; margin-bottom: 20px;">📚 Documentación Completa</h3>
+                <p style="font-size: 1.1em; color: #64748b; margin-bottom: 20px;">
+                    Para la guía paso a paso detallada, revisa:
+                </p>
+                <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap;">
+                    <div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #e2e8f0;">
+                        <strong>📄 DEPLOYMENT_GUIDE.md</strong><br>
+                        <span style="color: #64748b;">Guía completa detallada</span>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #e2e8f0;">
+                        <strong>⚡ QUICK_DEPLOY.md</strong><br>
+                        <span style="color: #64748b;">Comandos rápidos</span>
+                    </div>
+                    <div style="background: white; padding: 20px; border-radius: 10px; border: 2px solid #e2e8f0;">
+                        <strong>⚙️ nginx.conf.example</strong><br>
+                        <span style="color: #64748b;">Config de Nginx</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
