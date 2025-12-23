@@ -183,11 +183,15 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
     REGLAS DE AGENDAMIENTO:
     1. ANTES de ofrecer horarios, SIEMPRE usa 'get_available_slots' para saber qué hay libre.
-    2. Si el usuario quiere una cita nueva, usa 'schedule_appointment' SOLO si coincide con un horario disponible.
-    3. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
+    2. ANTES de agendar una cita, SIEMPRE pregunta el nombre completo del paciente si no lo sabes.
+    3. Si el usuario quiere una cita nueva, usa 'schedule_appointment' SOLO si:
+       - Tienes el nombre completo del paciente
+       - El horario coincide con un slot disponible
+    4. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
        - Primero usa 'get_my_appointments' para ver qué citas tiene activas.
        - Si tiene citas, pregúntale cuál quiere cambiar o usa 'reschedule_appointment' si hay una clara para cambiar.
-    4. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).`;
+    5. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
+    6. NUNCA uses placeholders como "[Nombre del paciente]" - siempre usa el nombre real que te dé el usuario.`;
 
     const contents = [
       ...history.reverse().map(m => ({
