@@ -717,6 +717,8 @@ function CalendarTab() {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(loadData, 10000); // Poll every 10s
+    return () => clearInterval(interval);
   }, [currentWeek]);
 
   const loadData = async () => {
