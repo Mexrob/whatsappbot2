@@ -584,23 +584,23 @@ const AppointmentsTab = () => {
                     </button>
 
                     {activeMenu === appt.id && (
-                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 z-[60] py-2 animate-in fade-in zoom-in duration-150 origin-top-right">
+                      <div className="fixed right-8 mt-2 w-48 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 z-[60] py-2 animate-in fade-in zoom-in duration-150 origin-top-right">
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'confirmed')}
-                          className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-green-50 hover:text-green-600 flex items-center gap-2"
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 dark:hover:text-green-400 flex items-center gap-2"
                         >
                           <div className="w-2 h-2 rounded-full bg-green-500" /> Confirmar Cita
                         </button>
                         <button
                           onClick={() => handleUpdateStatus(appt.id, 'cancelled')}
-                          className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-amber-50 hover:text-amber-600 flex items-center gap-2"
+                          className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-2"
                         >
                           <div className="w-2 h-2 rounded-full bg-amber-500" /> Cancelar Cita
                         </button>
-                        <div className="h-[1px] bg-slate-100 my-1" />
+                        <div className="h-[1px] bg-slate-100 dark:bg-slate-700 my-1" />
                         <button
                           onClick={() => handleDelete(appt.id)}
-                          className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center gap-2"
+                          className="w-full text-left px-4 py-2 text-sm text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                         >
                           Eliminar Registro
                         </button>
