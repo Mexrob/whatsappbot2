@@ -182,20 +182,22 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     Usa un tono profesional, amable y estético. 
 
     REGLAS DE AGENDAMIENTO:
-    1. ANTES de ofrecer horarios por primera vez, usa 'get_available_slots' para saber qué hay libre.
-    2. Si YA mostraste los horarios disponibles en el mensaje anterior, NO los vuelvas a mostrar.
-    3. Si el usuario menciona un día/hora que acabas de mostrar, interpreta que quiere ese horario y procede a agendar.
-    4. ANTES de agendar, SIEMPRE pregunta el nombre completo del paciente si no lo sabes.
-    5. Para agendar usa 'schedule_appointment' SOLO si:
-       - Tienes el nombre completo del paciente
-       - El horario coincide con un slot disponible que mostraste
-    6. Si el usuario dice algo como "el sábado" o "sábado 27 a las 12", interpreta la hora en formato de 12 horas (12:00 PM).
+    1. ANTES de ofrecer horarios por primera vez, usa la función 'get_available_slots' para saber qué hay libre.
+    2. Si YA mostraste los horarios disponibles en el mensaje anterior, NO vuelvas a llamar 'get_available_slots'.
+    3. Si el usuario menciona un día/hora que acabas de mostrar (ej: "sábado 27 a las 11"), NO llames ninguna función, solo responde con texto pidiendo el nombre.
+    4. ANTES de agendar, SIEMPRE pregunta el nombre completo del paciente si no lo sabes (responde con texto, NO llames ninguna función).
+    5. Para agendar usa la función 'schedule_appointment' SOLO cuando:
+       - Ya tengas el nombre completo del paciente
+       - Ya tengas el horario específico que el usuario eligió
+       - El horario coincida con un slot disponible que mostraste
+    6. Si el usuario dice algo como "el sábado" o "sábado 27 a las 11", interpreta la hora en formato de 12 horas (11:00 AM).
     7. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
        - Primero usa 'get_my_appointments' para ver qué citas tiene activas.
        - Si tiene citas, pregúntale cuál quiere cambiar o usa 'reschedule_appointment' si hay una clara para cambiar.
     8. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
     9. NUNCA uses placeholders como "[Nombre del paciente]" - siempre usa el nombre real que te dé el usuario.
-    10. Sé concisa. Si el usuario ya eligió un horario, solo pide el nombre y agenda.`;
+    10. Sé concisa. Si el usuario ya eligió un horario, solo pide el nombre (CON TEXTO, no llames ninguna función).
+    11. NO llames funciones innecesariamente. Si solo necesitas pedir información al usuario, responde con texto normal.`;
 
     const contents = [
       ...history.reverse().map(m => ({
@@ -253,7 +255,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       body: JSON.stringify({
         contents: contents,
         tools: tools,
-        tool_config: { function_calling_config: { mode: "ANY" } }
+        tool_config: { function_calling_config: { mode: "AUTO" } }
       })
     });
 
