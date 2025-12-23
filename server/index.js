@@ -274,8 +274,13 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             const { patient_name, appointment_date, appointment_type } = args;
 
             // Validate Availability
-            const apptTime = new Date(appointment_date).getTime();
-            const valid = db.prepare('SELECT id FROM availability WHERE ? >= strftime("%s", start_time) * 1000 AND ? < strftime("%s", end_time) * 1000').get(apptTime, apptTime);
+            // appointment_date comes from AI in ISO format (e.g., "2025-12-27T13:00")
+            // We need to check if this falls within any availability slot
+            const valid = db.prepare(`
+              SELECT id FROM availability 
+              WHERE datetime(?) >= datetime(start_time) 
+              AND datetime(?) < datetime(end_time)
+            `).get(appointment_date, appointment_date);
 
             if (!valid) {
               aiResponse = "Lo siento, ese horario ya no está disponible o no está abierto en nuestra agenda. ¿Te gustaría ver otras opciones?";
