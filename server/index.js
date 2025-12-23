@@ -274,13 +274,18 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             const { patient_name, appointment_date, appointment_type } = args;
 
             // Validate Availability
-            // appointment_date comes from AI in ISO format (e.g., "2025-12-27T13:00")
-            // We need to check if this falls within any availability slot
+            // appointment_date comes from AI in CDMX local time (e.g., "2025-12-27T13:00")
+            // But availability slots are stored in UTC
+            // CDMX is UTC-6, so we need to add 6 hours to convert to UTC
+            const apptDateLocal = new Date(appointment_date);
+            const apptDateUTC = new Date(apptDateLocal.getTime() + (6 * 60 * 60 * 1000));
+            const apptDateUTCString = apptDateUTC.toISOString().slice(0, 16); // "2025-12-27T19:00"
+
             const valid = db.prepare(`
               SELECT id FROM availability 
               WHERE datetime(?) >= datetime(start_time) 
               AND datetime(?) < datetime(end_time)
-            `).get(appointment_date, appointment_date);
+            `).get(apptDateUTCString, apptDateUTCString);
 
             if (!valid) {
               aiResponse = "Lo siento, ese horario ya no está disponible o no está abierto en nuestra agenda. ¿Te gustaría ver otras opciones?";
