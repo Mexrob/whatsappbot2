@@ -441,7 +441,7 @@ const AppointmentsTab = () => {
 
   useEffect(() => {
     fetchAppointments();
-    const interval = setInterval(fetchAppointments, 10000); // Poll every 10 seconds
+    const interval = setInterval(fetchAppointments, 2000); // Poll every 2 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -717,7 +717,7 @@ function CalendarTab() {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 10000); // Poll every 10s
+    const interval = setInterval(loadData, 2000); // Poll every 2 seconds
     return () => clearInterval(interval);
   }, [currentWeek]);
 
