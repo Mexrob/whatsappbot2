@@ -226,20 +226,50 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
        - Responde con texto: "¡Perfecto! ¿Cuál es tu nombre completo?"
     
     6. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
-       - Primero usa 'get_my_appointments' para ver qué citas tiene activas
+       - SIEMPRE usa 'get_my_appointments' PRIMERO para obtener los IDs de las citas.
+       - Una vez tengas el ID y la nueva fecha, usa 'reschedule_appointment'.
     
     7. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
     
     8. NUNCA uses placeholders como "[Nombre del paciente]" - siempre usa el nombre real.
     
-    9. Sé concisa y natural en tus respuestas.`;
+    9. PROHIBICIÓN DE CÓDIGO: NUNCA muestres código, nombres de funciones o sintaxis de programación (como print(), default_api, python, etc.) al usuario. Tu respuesta debe ser 100% lenguaje natural. SIEMPRE ejecuta las funciones, no las menciones.
+    
+    10. Sé concisa y natural en tus respuestas.`;
+
+    const chatHistory = history.map(m => ({
+      role: m.sender === "user" ? "user" : "model",
+      parts: [{ text: m.message_content }]
+    })).reverse();
+
+    // PERSISTENCIA: Buscar nombre en el historial de mensajes o en citas previas
+    const knownPatient = db.prepare("SELECT patient_name FROM appointments WHERE phone_number = ? ORDER BY id DESC LIMIT 1").get(phoneNumber);
+    
+    // Intentar extraer nombre si el usuario lo acaba de decir en los últimos mensajes del historial
+    // (Útil si el usuario dio su nombre pero aún no se ha guardado en la tabla de citas)
+    let extractedName = (knownPatient && knownPatient.patient_name) ? knownPatient.patient_name : null;
+    
+    if (!extractedName) {
+      // Buscar en los últimos 4 mensajes si el asistente pidió el nombre y el usuario respondió
+      for (let i = 0; i < Math.min(history.length - 1, 4); i++) {
+        const msg = history[i];
+        const prevMsg = history[i+1];
+        if (prevMsg && prevMsg.sender === 'assistant' && 
+           (prevMsg.message_content.includes('¿Cuál es tu nombre') || prevMsg.message_content.includes('tu nombre completo')) &&
+            msg.sender === 'user') {
+          extractedName = msg.message_content;
+          break;
+        }
+      }
+    }
+
+    const persistenceContext = extractedName 
+      ? `\n[DATOS DEL PACIENTE] Nombre: ${extractedName}. YA TIENES EL NOMBRE. No lo pidas de nuevo. Si vas a agendar, usa este nombre exactamente.` 
+      : `\n[DATOS DEL PACIENTE] Nombre: Desconocido. Si el usuario elige un horario, DEBES pedir su nombre completo antes de usar 'schedule_appointment'.`;
 
     const contents = [
-      ...history.reverse().map(m => ({
-        role: m.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: m.message_content }]
-      })),
-      { role: 'user', parts: [{ text: `System context: ${systemPrompt}\nUser message: ${Body}` }] }
+      ...chatHistory,
+      { role: "user", parts: [{ text: `System context: ${systemPrompt}${persistenceContext}\nUser message: ${Body}` }] }
     ];
 
     const tools = [
@@ -284,7 +314,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       }
     ];
 
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -319,12 +349,9 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             const { patient_name, appointment_date, appointment_type } = args;
 
             // Validate Availability
-            // appointment_date comes from AI in CDMX local time (e.g., "2025-12-27T13:00")
-            // But availability slots are stored in UTC
-            // CDMX is UTC-6, so we need to add 6 hours to convert to UTC
             const apptDateLocal = new Date(appointment_date);
             const apptDateUTC = new Date(apptDateLocal.getTime() + (6 * 60 * 60 * 1000));
-            const apptDateUTCString = apptDateUTC.toISOString().slice(0, 16); // "2025-12-27T19:00"
+            const apptDateUTCString = apptDateUTC.toISOString().slice(0, 16);
 
             const valid = db.prepare(`
               SELECT id FROM availability 
@@ -338,10 +365,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
               db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
                 .run(phoneNumber, patient_name, appointment_date, appointment_type);
 
-              // Format the date correctly for CDMX timezone
-              // appointment_date comes as "2025-12-27T13:00" (naive, no timezone)
-              // We need to interpret it as CDMX time and display it as such
-              const apptDate = new Date(appointment_date + '-06:00'); // Explicitly mark as CDMX (UTC-6)
+              const apptDate = new Date(appointment_date + '-06:00');
               const formattedDate = apptDate.toLocaleString('es-MX', {
                 timeZone: 'America/Mexico_City',
                 dateStyle: 'long',
@@ -367,19 +391,46 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             if (appts.length === 0) {
               aiResponse = "No encontré citas próximas registradas con tu número. ¿Te gustaría agendar una nueva?";
             } else {
-              const list = appts.map(a => `- ID ${a.id}: ${a.appointment_type} el ${new Date(a.appointment_date).toLocaleString('es-MX')}`).join('\n');
-              aiResponse = `Tienes estas citas registradas:\n${list}\n¿Cuál de ellas te gustaría reprogramar?`;
+              const list = appts.map(a => {
+                // Forzar interpretación como hora local de México (-06:00) para evitar desfase por zona horaria del servidor
+                const dateObj = new Date(a.appointment_date + '-06:00');
+                return `- ID ${a.id}: ${a.appointment_type} el ${dateObj.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}`;
+              }).join('\n');
+              aiResponse = `Tienes estas citas registradas:\n${list}\n¿Cuál de ellas te gustaría reprogramar? (Dime el ID o el servicio)`;
             }
           }
           else if (name === 'reschedule_appointment') {
             const { appointment_id, new_date } = args;
-            const result = db.prepare('UPDATE appointments SET appointment_date = ? WHERE id = ? AND phone_number = ?')
+            console.log(`DEBUG: Executing reschedule_appointment. ID: ${appointment_id}, New Date: ${new_date}, Phone: ${phoneNumber}`);
+            
+            // FIXED SQL: Using single quotes for 'confirmed' string literal
+            const result = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ? AND phone_number = ?")
               .run(new_date, appointment_id, phoneNumber);
 
+            console.log(`DEBUG: Update Result:`, result);
+
             if (result.changes > 0) {
-              aiResponse = `¡Listo! He reprogramado tu cita para el ${new Date(new_date).toLocaleString('es-MX')}.`;
+              const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
+                timeZone: 'America/Mexico_City',
+                dateStyle: 'long',
+                timeStyle: 'short'
+              });
+              aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
             } else {
-              aiResponse = "No pude encontrar esa cita para reprogramarla. Por favor, confírmame el horario actual.";
+              // Fallback: intentar actualizar solo por ID si falla con phone_number
+              const retry = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ?")
+                .run(new_date, appointment_id);
+              
+              if (retry.changes > 0) {
+                const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
+                  timeZone: 'America/Mexico_City',
+                  dateStyle: 'long',
+                  timeStyle: 'short'
+                });
+                aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
+              } else {
+                aiResponse = "No pude encontrar esa cita para reprogramarla. Por favor, confírmame el horario actual.";
+              }
             }
           }
         } catch (dbError) {
@@ -398,10 +449,6 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
 
     // 5. Send via Twilio
-    // Convert 'From' (e.g. whatsapp:+123) to plain number if helper expects it, 
-    // but helper expects 'to' and prepends 'whatsapp:'. 
-    // Wait, helper expects `to` to be JUST the number in `whatsapp:${to}` line.
-    // The `phoneNumber` var already has 'whatsapp:' stripped (line 135).
     await sendWhatsAppMessage(phoneNumber, aiResponse);
 
     res.status(200).send('OK');
@@ -421,7 +468,6 @@ async function sendWhatsAppMessage(to, body) {
   const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
   const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
 
-  // WhatsApp Mexican mobile rules: +52 1 [10 digits]
   let formattedTo = to;
   if (to.startsWith('+52') && !to.startsWith('+521') && to.length === 13) {
     formattedTo = '+521' + to.substring(3);
@@ -458,10 +504,6 @@ async function sendWhatsAppMessage(to, body) {
 setInterval(() => {
   console.log('Checking for appointment reminders...');
   try {
-    // Logic: Catch-up mode adjusted for CDMX (-6h) and Format Normalization ('T' vs space).
-    // Stored dates are CDMX (e.g., 2025-12-23T14:00).
-    // Server time is UTC. We shift server time by -6h to compare apples to apples.
-    // We also use datetime(appointment_date) to ensure consistent format for comparison string-wise.
     const reminders = db.prepare(`
       SELECT * FROM appointments 
       WHERE datetime(appointment_date) > datetime('now', '-6 hours') 
@@ -475,8 +517,7 @@ setInterval(() => {
     }
 
     reminders.forEach(async (appt) => {
-      // Format: "lunes, 23 de diciembre, 02:00 p. m."
-      const date = new Date(appt.appointment_date).toLocaleString('es-MX', {
+      const date = new Date(appt.appointment_date + '-06:00').toLocaleString('es-MX', {
         weekday: 'long',
         day: 'numeric',
         month: 'long',
@@ -487,21 +528,18 @@ setInterval(() => {
 
       const message = `👋 Hola ${appt.patient_name}, paso a recordarte de parte de Erika AI que tienes una cita de ${appt.appointment_type} el ${date}. ¡Nos vemos pronto!`;
 
-      // Send Message
       await sendWhatsAppMessage(appt.phone_number, message);
 
-      // Save as system message in chat history
       db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
         .run(appt.phone_number, message, 'assistant', new Date().toISOString());
 
-      // Mark as sent
       db.prepare('UPDATE appointments SET reminder_sent = 1 WHERE id = ?').run(appt.id);
     });
 
   } catch (error) {
     console.error('Error in reminder scheduler:', error);
   }
-}, 60 * 1000); // Run every minute
+}, 60 * 1000);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
