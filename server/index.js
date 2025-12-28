@@ -232,7 +232,9 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     
     8. NUNCA uses placeholders como "[Nombre del paciente]" - siempre usa el nombre real.
     
-    9. Sé concisa y natural en tus respuestas.`;
+    9. Sé concisa y natural en tus respuestas.
+    
+    10. REGLA DE ENLACES: NUNCA añadas puntos, comas o cualquier signo de puntuación inmediatamente después de una URL (ej: usa "aquí: https://enlace" en lugar de "aquí: https://enlace."). El enlace debe terminar con un espacio o un salto de línea.`;
 
     const contents = [
       ...history.reverse().map(m => ({
