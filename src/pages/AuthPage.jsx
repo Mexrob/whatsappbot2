@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 
-const AuthPage = ({ onLogin }) => {
+const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('admin@clinica.com');
   const [password, setPassword] = useState('admin123');
@@ -25,14 +25,18 @@ const AuthPage = ({ onLogin }) => {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-teal-200">
-            <Sparkles className="text-white" />
+          <div className="w-12 h-12 bg-teal-500 rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-teal-200 overflow-hidden">
+            {clinicLogo ? (
+              <img src={clinicLogo} alt="Logo" className="w-full h-full object-cover" />
+            ) : (
+              <Sparkles className="text-white" />
+            )}
           </div>
           <h2 className="text-2xl font-bold text-slate-900">
             {isLogin ? 'Bienvenido de nuevo' : 'Crea tu cuenta'}
           </h2>
           <p className="text-slate-500 text-sm mt-2">
-            {isLogin ? 'Ingresa tus credenciales para acceder' : 'Regístrate para empezar a usar Erika IA'}
+            {isLogin ? 'Ingresa tus credenciales para acceder' : `Regístrate para empezar a usar ${clinicName}`}
           </p>
         </div>
 
@@ -58,7 +62,7 @@ const AuthPage = ({ onLogin }) => {
               placeholder="••••••••"
             />
           </div>
-          
+
           <button
             type="submit"
             className="w-full bg-teal-500 text-white py-3 rounded-xl font-bold hover:bg-teal-600 transition-colors mt-2"
@@ -68,7 +72,7 @@ const AuthPage = ({ onLogin }) => {
         </form>
 
         <div className="mt-6 text-center">
-          <button 
+          <button
             onClick={() => setIsLogin(!isLogin)}
             className="text-sm text-teal-600 font-medium hover:underline"
           >

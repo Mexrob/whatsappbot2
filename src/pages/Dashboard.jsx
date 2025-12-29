@@ -18,6 +18,8 @@ import {
   X,
   ArrowLeft,
   ArrowRight,
+  Play,
+  Pause, Edit2,
   Moon,
   Sun,
   Trash2,
@@ -96,8 +98,12 @@ const Dashboard = ({ onLogout }) => {
         ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex items-center gap-3 px-4 mb-8">
-          <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-200">
-            <span className="text-white font-bold text-xl">E</span>
+          <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-200 overflow-hidden shrink-0">
+            {settings?.clinic_logo ? (
+              <img src={settings.clinic_logo} alt="Logo" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-white font-bold text-xl">{(settings?.clinic_name || 'E')[0]}</span>
+            )}
           </div>
           <h1 className="font-bold text-slate-800 dark:text-white leading-tight">
             {settings?.clinic_name || 'Erika AI'}
@@ -169,7 +175,7 @@ const Dashboard = ({ onLogout }) => {
 
           <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
           <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl mx-2">
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 22/12-23:45 Features++</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 29/12-12:00 Features++</p>
             <div className="flex items-center gap-1.5 mb-2">
               <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
               <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">Auto-Sync: Activado</p>
@@ -256,6 +262,7 @@ const MessagesTab = () => {
         if (!acc[msg.phone_number]) {
           acc[msg.phone_number] = {
             phone_number: msg.phone_number,
+            patient_name: msg.patient_name,
             lastMessage: msg.message_content,
             lastTime: formatTime(msg.received_at),
             messages: []
@@ -323,10 +330,11 @@ const MessagesTab = () => {
               >
                 <div className="flex justify-between items-start mb-1">
                   <h4 className={`font-bold truncate pr-2 ${selectedPhone === chat.phone_number ? 'text-teal-700 dark:text-teal-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                    {chat.phone_number}
+                    {chat.patient_name || chat.phone_number}
                   </h4>
                   <span className="text-[10px] text-slate-400 flex-shrink-0">{chat.lastTime}</span>
                 </div>
+                {chat.patient_name && <p className="text-[10px] text-slate-400 -mt-1 mb-1">{chat.phone_number}</p>}
                 <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{chat.lastMessage}</p>
               </div>
             ))
@@ -374,6 +382,56 @@ const MessagesTab = () => {
 // Extracted ChatWindow for better state/scroll management
 const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, onBack }) => {
   const scrollRef = useRef(null);
+  const [isAiPaused, setIsAiPaused] = useState(false);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await api.getChatStatus(activeChat.phone_number);
+        setIsAiPaused(res.data.is_ai_paused === 1);
+      } catch (error) {
+        console.error('Error fetching chat status:', error);
+      }
+    };
+    fetchStatus();
+  }, [activeChat.phone_number]);
+
+  const togglePause = async () => {
+    try {
+      await api.toggleAiPause({
+        phone_number: activeChat.phone_number,
+        is_ai_paused: !isAiPaused
+      });
+      setIsAiPaused(!isAiPaused);
+    } catch (error) {
+      console.error('Error toggling AI pause:', error);
+      alert('Error al cambiar el estado de la IA');
+    }
+  };
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState('');
+
+  useEffect(() => {
+    setTempName(activeChat.patient_name || '');
+  }, [activeChat]);
+
+  const handleUpdateName = async () => {
+    if (!tempName.trim()) {
+      setIsEditingName(false);
+      return;
+    }
+    try {
+      await api.updateChatName({
+        phone_number: activeChat.phone_number,
+        name: tempName
+      });
+      setIsEditingName(false);
+    } catch (error) {
+      console.error('Error updating name:', error);
+      alert('Error al actualizar nombre');
+    }
+  };
 
   const scrollToBottom = () => {
     if (scrollRef.current) {
@@ -396,14 +454,47 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
             {activeChat.phone_number.slice(-2)}
           </div>
           <div>
-            <h4 className="font-bold text-slate-800 dark:text-white">{activeChat.phone_number}</h4>
-            <span className="text-xs text-green-500 font-medium flex items-center gap-1">
-              <span className="inline-block animate-pulse w-2 h-2 bg-green-500 rounded-full" />
-              En línea
+            <div className="flex items-center gap-2">
+              {isEditingName ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={tempName}
+                  onChange={(e) => setTempName(e.target.value)}
+                  onBlur={handleUpdateName}
+                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateName()}
+                  className="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded outline-none font-bold text-slate-800 dark:text-white text-sm"
+                />
+              ) : (
+                <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setIsEditingName(true)}>
+                  <h4 className="font-bold text-slate-800 dark:text-white">{activeChat.patient_name || activeChat.phone_number}</h4>
+                  <Edit2 size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {isAiPaused && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 text-[10px] font-bold border border-amber-200 shadow-sm">
+                      IA PAUSADA
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
+              {activeChat.patient_name ? activeChat.phone_number : 'En línea'}
             </span>
           </div>
         </div>
-        <MoreVertical className="text-slate-400 cursor-pointer" />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={togglePause}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border shadow-sm ${isAiPaused
+              ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100'
+              : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
+              }`}
+          >
+            {isAiPaused ? <Play size={14} fill="currentColor" /> : <Pause size={14} fill="currentColor" />}
+            {isAiPaused ? 'Reactivar IA' : 'Pausar IA'}
+          </button>
+          <MoreVertical className="text-slate-400 cursor-pointer" />
+        </div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 custom-scrollbar">
@@ -895,7 +986,8 @@ const SettingsTab = ({ settings, onUpdate }) => {
     clinic_address: '',
     services: '',
     whatsapp_webhook_url: '',
-    timezone: 'America/Mexico_City'
+    timezone: 'America/Mexico_City',
+    clinic_logo: ''
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -908,10 +1000,22 @@ const SettingsTab = ({ settings, onUpdate }) => {
         clinic_address: settings.clinic_address || '',
         services: settings.services || '',
         whatsapp_webhook_url: settings.whatsapp_webhook_url || '',
-        timezone: settings.timezone || 'America/Mexico_City'
+        timezone: settings.timezone || 'America/Mexico_City',
+        clinic_logo: settings.clinic_logo || ''
       });
     }
   }, [settings]);
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, clinic_logo: reader.result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -939,33 +1043,62 @@ const SettingsTab = ({ settings, onUpdate }) => {
           <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
             <User size={20} className="text-teal-500" /> Información General
           </h3>
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Nombre de la Clínica</label>
-              <input
-                type="text"
-                value={formData.clinic_name}
-                onChange={(e) => setFormData({ ...formData, clinic_name: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
+          <div className="flex flex-col md:flex-row gap-8 mb-8 items-start">
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Logo de la Clínica</label>
+              <div className="flex items-center gap-4">
+                <div className="w-24 h-24 rounded-2xl bg-slate-100 dark:bg-slate-700 border-2 border-dashed border-slate-200 dark:border-slate-600 flex items-center justify-center overflow-hidden">
+                  {formData.clinic_logo ? (
+                    <img src={formData.clinic_logo} alt="Logo Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <Plus className="text-slate-400" />
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="cursor-pointer bg-teal-500 hover:bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">
+                    Subir Imagen
+                    <input type="file" className="hidden" accept="image/*" onChange={handleLogoChange} />
+                  </label>
+                  {formData.clinic_logo && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, clinic_logo: '' })}
+                      className="text-red-500 text-xs font-bold hover:underline"
+                    >
+                      Eliminar Logo
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Teléfono WhatsApp</label>
-              <input
-                type="text"
-                value={formData.clinic_phone}
-                onChange={(e) => setFormData({ ...formData, clinic_phone: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
-            </div>
-            <div className="col-span-2 space-y-2">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Dirección</label>
-              <input
-                type="text"
-                value={formData.clinic_address}
-                onChange={(e) => setFormData({ ...formData, clinic_address: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Nombre de la Clínica</label>
+                <input
+                  type="text"
+                  value={formData.clinic_name}
+                  onChange={(e) => setFormData({ ...formData, clinic_name: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Teléfono WhatsApp</label>
+                <input
+                  type="text"
+                  value={formData.clinic_phone}
+                  onChange={(e) => setFormData({ ...formData, clinic_phone: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
+              <div className="md:col-span-2 space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Dirección</label>
+                <input
+                  type="text"
+                  value={formData.clinic_address}
+                  onChange={(e) => setFormData({ ...formData, clinic_address: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
             </div>
           </div>
         </section>

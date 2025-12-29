@@ -20,7 +20,11 @@ Erika IA es una plataforma de gestión para clínicas estéticas que incluye un 
    - Los datos se guardan en `server/database.sqlite`.
 
 2. **Variables de Entorno**:
-   - Copia `.env.example` a `.env` y rellena las claves de Gemini y Twilio.
+   - Crea un archivo `.env` en la raíz (usa `.env.example` como base si existe) y rellena las claves de Gemini y YCloud.
+   - **GEMINI_API_KEY**: Tu clave de Google AI Studio.
+   - **YCLOUD_API_KEY**: Tu clave de API de YCloud.
+   - **YCLOUD_FROM**: Tu número o Sender ID de WhatsApp en YCloud.
+   - **YCLOUD_WABA_ID**: Tu WhatsApp Business Account ID.
 
 3. **Ejecución**:
    ```bash
@@ -28,5 +32,6 @@ Erika IA es una plataforma de gestión para clínicas estéticas que incluye un 
    ```
    Esto iniciará tanto el frontend (5173) como el backend (3001).
 
-4. **Integración con WhatsApp**:
-   - Debes exponer tu servidor local mediante `ngrok` y configurar el webhook de Twilio hacia esa URL.
+4. **Integración con WhatsApp (YCloud)**:
+   - Configura el Webhook en tu panel de YCloud apuntando a: `http://TU_IP_VPS:3001/api/webhook/whatsapp`.
+   - Asegúrate de que el puerto 3001 esté abierto en el firewall de tu VPS.

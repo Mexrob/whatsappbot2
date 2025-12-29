@@ -4,10 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\" \"npm run dev:tunnel\"",
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "vite",
     "dev:server": "cd server && npx nodemon index.js",
-    "dev:tunnel": "cd server && ./ngrok http 3001",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

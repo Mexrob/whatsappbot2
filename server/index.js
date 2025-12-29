@@ -64,9 +64,9 @@ app.get('/api/settings', (req, res) => {
 app.put('/api/settings', (req, res) => {
   console.log('DEBUG: Received settings update request:', req.body);
   try {
-    const { clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone } = req.body;
-    const result = db.prepare('UPDATE clinic_settings SET clinic_name = ?, clinic_address = ?, clinic_phone = ?, services = ?, whatsapp_webhook_url = ?, timezone = ? WHERE id = 1')
-      .run(clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone);
+    const { clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone, clinic_logo } = req.body;
+    const result = db.prepare('UPDATE clinic_settings SET clinic_name = ?, clinic_address = ?, clinic_phone = ?, services = ?, whatsapp_webhook_url = ?, timezone = ?, clinic_logo = ? WHERE id = 1')
+      .run(clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone, clinic_logo);
     console.log('DEBUG: Settings update result:', result);
     res.json({ success: true });
   } catch (error) {
@@ -137,8 +137,43 @@ app.delete('/api/appointments/:id', (req, res) => {
 
 // Messages
 app.get('/api/messages', (req, res) => {
-  const messages = db.prepare('SELECT * FROM messages ORDER BY received_at DESC').all();
+  const messages = db.prepare(`
+    SELECT m.*, p.name as patient_name
+    FROM messages m 
+    LEFT JOIN patients p ON m.phone_number = p.phone_number
+    ORDER BY received_at DESC
+  `).all();
   res.json(messages);
+});
+
+app.post('/api/chats/update-name', (req, res) => {
+  let { phone_number, name } = req.body;
+  if (phone_number.startsWith('+521') && phone_number.length === 14) {
+    phone_number = '+52' + phone_number.substring(4);
+  }
+  db.prepare('INSERT INTO patients (phone_number, name) VALUES (?, ?) ON CONFLICT(phone_number) DO UPDATE SET name = EXCLUDED.name')
+    .run(phone_number, name);
+  res.json({ success: true });
+});
+
+// AI Pause Endpoints
+app.get('/api/chats/status/:phone_number', (req, res) => {
+  let { phone_number } = req.params;
+  if (phone_number.startsWith('+521') && phone_number.length === 14) {
+    phone_number = '+52' + phone_number.substring(4);
+  }
+  const status = db.prepare('SELECT is_ai_paused FROM chat_status WHERE phone_number = ?').get(phone_number);
+  res.json({ is_ai_paused: status ? status.is_ai_paused : 0 });
+});
+
+app.post('/api/chats/toggle-pause', (req, res) => {
+  let { phone_number, is_ai_paused } = req.body;
+  if (phone_number.startsWith('+521') && phone_number.length === 14) {
+    phone_number = '+52' + phone_number.substring(4);
+  }
+  db.prepare('INSERT INTO chat_status (phone_number, is_ai_paused) VALUES (?, ?) ON CONFLICT(phone_number) DO UPDATE SET is_ai_paused = EXCLUDED.is_ai_paused')
+    .run(phone_number, is_ai_paused ? 1 : 0);
+  res.json({ success: true });
 });
 
 app.post('/api/messages', async (req, res) => {
@@ -167,10 +202,21 @@ app.post('/api/messages', async (req, res) => {
   }
 });
 
-// WhatsApp Webhook (Local version)
+// WhatsApp Webhook (YCloud version)
 app.post('/api/webhook/whatsapp', async (req, res) => {
-  const { Body, From } = req.body;
-  let phoneNumber = From.replace('whatsapp:', '');
+  const { type, whatsappInboundMessageReceived, whatsappInboundMessage } = req.body;
+  const inboundData = whatsappInboundMessage || whatsappInboundMessageReceived;
+
+  // Verify it's an inbound message
+  if (type !== 'whatsapp.inbound_message.received' || !inboundData) {
+    return res.status(200).send('OK'); // Acknowledge other event types (deliveries, etc.)
+  }
+
+  const Body = inboundData.text?.body || '';
+  let phoneNumber = inboundData.from;
+  const profileName = inboundData.customerProfile?.name;
+
+  if (!phoneNumber) return res.status(200).send('OK');
 
   // Normalize Mexican phone numbers (+521... -> +52...)
   if (phoneNumber.startsWith('+521') && phoneNumber.length === 14) {
@@ -178,10 +224,23 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
   }
 
   try {
-    console.log('Webhook triggered. From:', From, 'Body:', Body, '(Normalized to:', phoneNumber, ')');
+    // Automatically save or update patient name from WhatsApp profile
+    if (profileName) {
+      db.prepare('INSERT INTO patients (phone_number, name) VALUES (?, ?) ON CONFLICT(phone_number) DO UPDATE SET name = EXCLUDED.name')
+        .run(phoneNumber, profileName);
+    }
+
+    console.log('Webhook triggered (YCloud). From:', phoneNumber, 'Body:', Body, 'ProfileName:', profileName);
     // 1. Save user message
     db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
       .run(phoneNumber, Body, 'user', new Date().toISOString());
+
+    // Check if AI is paused for this number
+    const chatStatus = db.prepare('SELECT is_ai_paused FROM chat_status WHERE phone_number = ?').get(phoneNumber);
+    if (chatStatus && chatStatus.is_ai_paused === 1) {
+      console.log(`DEBUG: AI is paused for ${phoneNumber}. Skipping automated response.`);
+      return res.status(200).send('OK');
+    }
 
     // 2. Get Clinic Settings & History
     const settings = db.prepare('SELECT * FROM clinic_settings WHERE id = 1').get();
@@ -199,9 +258,11 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     );
 
     // 3. Call Gemini
-    const systemPrompt = `Eres Erika, la asistente virtual de la clínica ${settings.clinic_name}. 
+    const patientRecord = db.prepare('SELECT name FROM patients WHERE phone_number = ?').get(phoneNumber);
+    const extractedName = patientRecord ? patientRecord.name : null;
+    const systemPrompt = `Eres Erika, la asistente virtual de ${settings.clinic_name}. 
     Tu objetivo es agendar citas, reprogramarlas y resolver dudas. 
-    Hora actual de la clínica: ${localTime}.
+    Hora actual: ${localTime}.
     Servicios: ${settings.services}.
     Dirección: ${settings.clinic_address}.
     Usa un tono profesional, amable y estético. 
@@ -242,6 +303,12 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     ${extractedName
         ? `\n[DATOS DEL PACIENTE] Nombre: ${extractedName}. YA TIENES EL NOMBRE. No lo pidas de nuevo. Si vas a agendar, usa este nombre exactamente.`
         : `\n[DATOS DEL PACIENTE] Nombre: Desconocido. Si el usuario elige un horario, DEBES pedir su nombre completo antes de usar 'schedule_appointment'.`}`;
+
+    // Map history to Gemini format
+    const chatHistory = history.reverse().map(m => ({
+      role: m.sender === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.message_content }]
+    }));
 
     const contents = [
       ...chatHistory,
@@ -354,7 +421,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
           else if (name === 'get_available_slots') {
             const slots = db.prepare("SELECT start_time FROM availability WHERE start_time > datetime('now', '-6 hours') ORDER BY start_time ASC LIMIT 10").all();
             if (slots.length === 0) {
-              aiResponse = "Por el momento no tengo horarios disponibles en el sistema. Por favor, intenta contactar directamente a la clínica.";
+              aiResponse = `Por el momento no tengo horarios disponibles en el sistema. Por favor, intenta contactar directamente a ${settings.clinic_name}.`;
             } else {
               const list = slots.map(s => {
                 return `- ${new Date(s.start_time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'short', hour: 'numeric', minute: 'numeric', timeZone: 'America/Mexico_City' })}`;
@@ -439,40 +506,46 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-// Helper: Send WhatsApp Message
+// Helper: Send WhatsApp Message via YCloud
 async function sendWhatsAppMessage(to, body) {
-  const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
-  const auth = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+  const ycloudUrl = 'https://api.ycloud.com/v2/whatsapp/messages/sendDirectly';
 
-  let formattedTo = to;
-  if (to.startsWith('+52') && !to.startsWith('+521') && to.length === 13) {
-    formattedTo = '+521' + to.substring(3);
-    console.log(`Normalizing Mexican number for Twilio: ${to} -> ${formattedTo}`);
+  // Normalize Mexican phone numbers (+521... -> +52...) for consistency if needed, 
+  // but YCloud usually handles E.164. 
+  // The server code already has some normalization logic in the routes.
+
+  let formattedTo = to.replace('whatsapp:', ''); // Ensure it doesn't have the twilio prefix
+  if (formattedTo.startsWith('+521') && formattedTo.length === 14) {
+    formattedTo = '+52' + formattedTo.substring(4);
   }
 
   try {
-    const response = await fetch(twilioUrl, {
+    const response = await fetch(ycloudUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'X-API-Key': process.env.YCLOUD_API_KEY,
+        'Content-Type': 'application/json'
       },
-      body: new URLSearchParams({
-        To: `whatsapp:${formattedTo}`,
-        From: process.env.TWILIO_PHONE_NUMBER,
-        Body: body
+      body: JSON.stringify({
+        from: process.env.YCLOUD_FROM,
+        to: formattedTo,
+        type: 'text',
+        text: {
+          body: body
+        },
+        wabaId: process.env.YCLOUD_WABA_ID
       })
     });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Twilio API Error Details:', data);
-      throw new Error(`Twilio API Error: ${data.message || response.statusText}`);
+      console.error('YCloud API Error Details:', data);
+      throw new Error(`YCloud API Error: ${data.message || response.statusText}`);
     }
-    console.log(`Message successfully sent to ${formattedTo}. SID: ${data.sid}`);
+    console.log(`Message successfully sent to ${formattedTo} via YCloud. ID: ${data.id}`);
   } catch (error) {
-    console.error('Error sending WhatsApp message:', error);
+    console.error('Error sending WhatsApp message via YCloud:', error);
   }
 }
 

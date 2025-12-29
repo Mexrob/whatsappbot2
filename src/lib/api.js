@@ -53,5 +53,8 @@ export const api = {
       method: 'DELETE',
     });
     return res.json();
-  }
+  },
+  getChatStatus: (phone) => axios.get(`${API_URL}/chats/status/${encodeURIComponent(phone)}`),
+  toggleAiPause: (data) => axios.post(`${API_URL}/chats/toggle-pause`, data),
+  updateChatName: (data) => axios.post(`${API_URL}/chats/update-name`, data)
 };

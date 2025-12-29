@@ -1,12 +1,16 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import LandingPage from './pages/LandingPage'
 import AuthPage from './pages/AuthPage'
 import Dashboard from './pages/Dashboard'
+import { api } from './lib/api'
 
 function App() {
   const [view, setView] = useState('landing');
+  const [clinicName, setClinicName] = useState('Erika IA');
+  const [clinicLogo, setClinicLogo] = useState(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    // Session check
     const session = localStorage.getItem('erika_session');
     if (session) {
       const { timestamp } = JSON.parse(session);
@@ -17,6 +21,16 @@ function App() {
         localStorage.removeItem('erika_session');
       }
     }
+
+    // Fetch clinic name
+    api.getSettings().then(res => {
+      if (res.data?.clinic_name) {
+        setClinicName(res.data.clinic_name);
+      }
+      if (res.data?.clinic_logo) {
+        setClinicLogo(res.data.clinic_logo);
+      }
+    }).catch(console.error);
   }, []);
 
   const handleLoginSuccess = () => {
@@ -35,8 +49,8 @@ function App() {
 
   return (
     <div className="min-h-screen">
-      {view === 'landing' && <LandingPage onStart={() => setView('auth')} />}
-      {view === 'auth' && <AuthPage onLogin={handleLoginSuccess} />}
+      {view === 'landing' && <LandingPage clinicName={clinicName} clinicLogo={clinicLogo} onStart={() => setView('auth')} />}
+      {view === 'auth' && <AuthPage clinicName={clinicName} clinicLogo={clinicLogo} onLogin={handleLoginSuccess} />}
       {view === 'dashboard' && <Dashboard onLogout={handleLogout} />}
     </div>
   )
