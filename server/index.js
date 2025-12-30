@@ -185,14 +185,24 @@ app.post('/api/chats/update-name', (req, res) => {
   res.json({ success: true });
 });
 
-// AI Pause Endpoints
-app.get('/api/chats/status/:phone_number', (req, res) => {
+// AI Pause / Chatwoot Handoff status check
+async function isAiPaused(phoneNumber) {
+  if (process.env.ACTIVATE_CHATWOOT === 'true') {
+    // In Chatwoot mode, we could check conversation status via API
+    // but for now we follow the local db or a simplified logic.
+    // Future: check if conversation is 'open' (human) or 'pending' (bot)
+  }
+  const status = db.prepare('SELECT is_ai_paused FROM chat_status WHERE phone_number = ?').get(phoneNumber);
+  return status ? status.is_ai_paused : 0;
+}
+
+app.get('/api/chats/status/:phone_number', async (req, res) => {
   let { phone_number } = req.params;
   if (phone_number.startsWith('+521') && phone_number.length === 14) {
     phone_number = '+52' + phone_number.substring(4);
   }
-  const status = db.prepare('SELECT is_ai_paused FROM chat_status WHERE phone_number = ?').get(phone_number);
-  res.json({ is_ai_paused: status ? status.is_ai_paused : 0 });
+  const paused = await isAiPaused(phone_number);
+  res.json({ is_ai_paused: paused });
 });
 
 app.post('/api/chats/toggle-pause', (req, res) => {
@@ -204,6 +214,27 @@ app.post('/api/chats/toggle-pause', (req, res) => {
     .run(phone_number, is_ai_paused ? 1 : 0);
   res.json({ success: true });
 });
+
+// --- Chatwoot Webhook Endpoint ---
+app.post('/api/webhook/chatwoot', async (req, res) => {
+  if (process.env.ACTIVATE_CHATWOOT !== 'true') return res.status(200).send('Disabled');
+
+  const payload = req.body;
+  // Listen for new messages created by users (not by bot)
+  if (payload.event === 'message_created' && payload.message_type === 'incoming') {
+    const phoneNumber = payload.sender?.phone_number || '';
+    const content = payload.content;
+    const conversationId = payload.conversation?.id;
+
+    console.log(`[Chatwoot Webhook] New message from ${phoneNumber}: ${content}`);
+
+    // Here we could trigger the same AI logic as the YCloud webhook
+    // but calling a common function. 
+    // To keep it simple for this commit, we'll just log it.
+  }
+  res.status(200).send('OK');
+});
+
 
 app.post('/api/messages', async (req, res) => {
   console.log('DEBUG: Received message save request:', req.body);
@@ -263,6 +294,9 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     // 1. Save user message
     db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
       .run(phoneNumber, Body, 'user', new Date().toISOString());
+
+    // 2. Sync with Chatwoot if active
+    const conversationId = await syncWithChatwoot(phoneNumber, Body, profileName);
 
     // Check if AI is paused for this number
     const chatStatus = db.prepare('SELECT is_ai_paused FROM chat_status WHERE phone_number = ?').get(phoneNumber);
@@ -550,7 +584,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
 
     // 5. Send via Twilio
-    await sendWhatsAppMessage(phoneNumber, aiResponse);
+    await sendWhatsAppMessage(phoneNumber, aiResponse, conversationId);
 
     res.status(200).send('OK');
   } catch (error) {
@@ -564,19 +598,34 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 
-// Helper: Send WhatsApp Message via YCloud
-async function sendWhatsAppMessage(to, body) {
-  const ycloudUrl = 'https://api.ycloud.com/v2/whatsapp/messages/sendDirectly';
-
-  // Normalize Mexican phone numbers (+521... -> +52...) for consistency if needed, 
-  // but YCloud usually handles E.164. 
-  // The server code already has some normalization logic in the routes.
-
-  let formattedTo = to.replace('whatsapp:', ''); // Ensure it doesn't have the twilio prefix
+// Helper: Send WhatsApp Message (YCloud or Chatwoot)
+async function sendWhatsAppMessage(to, body, conversationId = null) {
+  let formattedTo = to.replace('whatsapp:', '');
   if (formattedTo.startsWith('+521') && formattedTo.length === 14) {
     formattedTo = '+52' + formattedTo.substring(4);
   }
 
+  // --- ROUTE TO CHATWOOT IF ACTIVE ---
+  if (process.env.ACTIVATE_CHATWOOT === 'true' && conversationId) {
+    try {
+      const cwUrl = `${process.env.CHATWOOT_URL}/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations/${conversationId}/messages`;
+      await fetch(cwUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api_access_token': process.env.CHATWOOT_ACCESS_TOKEN
+        },
+        body: JSON.stringify({ content: body, message_type: 'outgoing' })
+      });
+      console.log(`Message sent to Chatwoot conversation ${conversationId}`);
+      return;
+    } catch (cwError) {
+      console.error('Error sending to Chatwoot, falling back to YCloud:', cwError);
+    }
+  }
+
+  // --- DIRECT YCLOUD ROUTE ---
+  const ycloudUrl = 'https://api.ycloud.com/v2/whatsapp/messages/sendDirectly';
   try {
     const response = await fetch(ycloudUrl, {
       method: 'POST',
@@ -588,22 +637,78 @@ async function sendWhatsAppMessage(to, body) {
         from: process.env.YCLOUD_FROM,
         to: formattedTo,
         type: 'text',
-        text: {
-          body: body
-        },
+        text: { body: body },
         wabaId: process.env.YCLOUD_WABA_ID
       })
     });
 
     const data = await response.json();
-
     if (!response.ok) {
-      console.error('YCloud API Error Details:', data);
+      console.error('YCloud API Error:', data);
       throw new Error(`YCloud API Error: ${data.message || response.statusText}`);
     }
-    console.log(`Message successfully sent to ${formattedTo} via YCloud. ID: ${data.id}`);
+    console.log(`Message sent to ${formattedTo} via YCloud. ID: ${data.id}`);
   } catch (error) {
     console.error('Error sending WhatsApp message via YCloud:', error);
+  }
+}
+
+
+// Helper: Sync with Chatwoot (Forward incoming message)
+async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
+  if (process.env.ACTIVATE_CHATWOOT !== 'true') return null;
+
+  try {
+    const accountId = process.env.CHATWOOT_ACCOUNT_ID;
+    const inboxId = process.env.CHATWOOT_INBOX_ID;
+    const cwUrl = `${process.env.CHATWOOT_URL}/api/v1/accounts/${accountId}`;
+    const headers = { 'Content-Type': 'application/json', 'api_access_token': process.env.CHATWOOT_ACCESS_TOKEN };
+
+    // 1. Find or create contact
+    let contactResponse = await fetch(`${cwUrl}/contacts/search?q=${phoneNumber}`, { headers });
+    let contactData = await contactResponse.json();
+    let contact = contactData.payload?.[0];
+
+    if (!contact) {
+      contactResponse = await fetch(`${cwUrl}/contacts`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: profileName || phoneNumber, phone_number: phoneNumber, inbox_id: inboxId })
+      });
+      contactData = await contactResponse.json();
+      contact = contactData.payload?.contact;
+    }
+
+    if (!contact) return null;
+
+    // 2. Find or create conversation
+    let conversationResponse = await fetch(`${cwUrl}/contacts/${contact.id}/conversations`, { headers });
+    let conversationData = await conversationResponse.json();
+    let conversation = conversationData.payload?.find(c => c.inbox_id == inboxId && c.status !== 'resolved');
+
+    if (!conversation) {
+      conversationResponse = await fetch(`${cwUrl}/conversations`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ source_id: contact.source_id, contact_id: contact.id, inbox_id: inboxId })
+      });
+      conversationData = await conversationResponse.json();
+      conversation = conversationData;
+    }
+
+    if (!conversation) return null;
+
+    // 3. Post message to Chatwoot
+    await fetch(`${cwUrl}/conversations/${conversation.id}/messages`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content: messageContent, message_type: 'incoming' })
+    });
+
+    return conversation.id;
+  } catch (error) {
+    console.error('Error syncing with Chatwoot:', error);
+    return null;
   }
 }
 
