@@ -48,6 +48,16 @@ const Dashboard = ({ onLogout }) => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
   });
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    // Load user from session
+    const session = localStorage.getItem('erika_session');
+    if (session) {
+      const { user } = JSON.parse(session);
+      setCurrentUser(user);
+    }
+  }, []);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -78,6 +88,12 @@ const Dashboard = ({ onLogout }) => {
   };
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
+
+  const hasPermission = (permission) => {
+    if (!currentUser) return true; // Show all items while loading
+    if (currentUser.role === 'admin') return true;
+    return currentUser.permissions?.[permission] || false;
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-900 overflow-hidden relative transition-colors duration-200">
@@ -116,56 +132,66 @@ const Dashboard = ({ onLogout }) => {
         </div>
 
         <nav className="flex-1 space-y-2 mt-8 md:mt-0">
-          <SidebarItem
-            id="messages"
-            iconComponent={MessageSquare}
-            label="Mensajes"
-            activeTab={activeTab}
-            onClick={(id) => {
-              setActiveTab(id);
-              setIsMobileMenuOpen(false);
-            }}
-          />
-          <SidebarItem
-            id="appointments"
-            iconComponent={List}
-            label="Citas"
-            activeTab={activeTab}
-            onClick={(id) => {
-              setActiveTab(id);
-              setIsMobileMenuOpen(false);
-            }}
-          />
-          <SidebarItem
-            id="calendar"
-            iconComponent={Calendar}
-            label="Agenda"
-            activeTab={activeTab}
-            onClick={(id) => {
-              setActiveTab(id);
-              setIsMobileMenuOpen(false);
-            }}
-          />
-          <SidebarItem
-            id="settings"
-            iconComponent={Settings}
-            label="Configuración"
-            activeTab={activeTab}
-            onClick={(id) => {
-              setActiveTab(id);
-              setIsMobileMenuOpen(false);
-            }}
-          />
-          <SidebarItem
-            id="users"
-            iconComponent={Users}
-            label="Usuarios"
-            activeTab={activeTab}
-            onClick={(id) => {
-              setActiveTab(id);
-              setIsMobileMenuOpen(false);
-            }}
-          />
+          {hasPermission('can_manage_messages') && (
+            <SidebarItem
+              id="messages"
+              iconComponent={MessageSquare}
+              label="Mensajes"
+              activeTab={activeTab}
+              onClick={(id) => {
+                setActiveTab(id);
+                setIsMobileMenuOpen(false);
+              }}
+            />
+          )}
+          {hasPermission('can_manage_appointments') && (
+            <SidebarItem
+              id="appointments"
+              iconComponent={List}
+              label="Citas"
+              activeTab={activeTab}
+              onClick={(id) => {
+                setActiveTab(id);
+                setIsMobileMenuOpen(false);
+              }}
+            />
+          )}
+          {hasPermission('can_manage_appointments') && (
+            <SidebarItem
+              id="calendar"
+              iconComponent={Calendar}
+              label="Agenda"
+              activeTab={activeTab}
+              onClick={(id) => {
+                setActiveTab(id);
+                setIsMobileMenuOpen(false);
+              }}
+            />
+          )}
+          {hasPermission('can_view_settings') && (
+            <SidebarItem
+              id="settings"
+              iconComponent={Settings}
+              label="Configuración"
+              activeTab={activeTab}
+              onClick={(id) => {
+                setActiveTab(id);
+                setIsMobileMenuOpen(false);
+              }}
+            />
+          )}
+          {(currentUser?.role === 'admin' || !currentUser) && (
+            <SidebarItem
+              id="users"
+              iconComponent={Users}
+              label="Usuarios"
+              activeTab={activeTab}
+              onClick={(id) => {
+                setActiveTab(id);
+                setIsMobileMenuOpen(false);
+              }}
+            />
+          )}
         </nav>
 
         <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700 pb-2">
@@ -1181,8 +1207,10 @@ const SettingsTab = ({ settings, onUpdate }) => {
 
 const UsersTab = () => {
   const [users, setUsers] = useState([]);
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ email: '', password: '', role: 'staff', permissions: {} });
+  const [editingUser, setEditingUser] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -1201,12 +1229,18 @@ const UsersTab = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.createUser(formData);
-      setFormData({ email: '', password: '' });
+      if (editingUser) {
+        await api.updateUser(editingUser.id, formData);
+      } else {
+        await api.createUser(formData);
+      }
+      setFormData({ email: '', password: '', role: 'staff', permissions: {} });
+      setEditingUser(null);
+      setShowModal(false);
       fetchUsers();
     } catch (error) {
-      console.error('Error creating user:', error);
-      alert('Error al crear usuario');
+      console.error('Error saving user:', error);
+      alert('Error al guardar usuario');
     } finally {
       setLoading(false);
     }
@@ -1219,74 +1253,222 @@ const UsersTab = () => {
         fetchUsers();
       } catch (error) {
         console.error('Error deleting user:', error);
+        alert(error.message || 'Error al eliminar usuario');
       }
     }
   };
 
+  const handleEdit = (user) => {
+    setEditingUser(user);
+    setFormData({
+      email: user.email,
+      password: '',
+      role: user.role,
+      permissions: user.permissions || {}
+    });
+    setShowModal(true);
+  };
+
+  const handleNewUser = () => {
+    setEditingUser(null);
+    setFormData({ email: '', password: '', role: 'staff', permissions: {} });
+    setShowModal(true);
+  };
+
+  const togglePermission = (key) => {
+    setFormData({
+      ...formData,
+      permissions: {
+        ...formData.permissions,
+        [key]: !formData.permissions[key]
+      }
+    });
+  };
+
   return (
-    <div className="p-8 overflow-y-auto h-full max-w-4xl">
-      <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">Gestión de Usuarios</h2>
+    <div className="p-8 overflow-y-auto h-full max-w-6xl">
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Gestión de Usuarios</h2>
+        <button
+          onClick={handleNewUser}
+          className="bg-teal-500 text-white px-6 py-2 rounded-xl font-bold hover:bg-teal-600 transition-colors flex items-center gap-2"
+        >
+          <Plus size={20} /> Nuevo Usuario
+        </button>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <section className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
-            <Plus size={20} className="text-teal-500" /> Nuevo Usuario
-          </h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Email</label>
-              <input
-                type="email"
-                required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Contraseña</label>
-              <input
-                type="password"
-                required
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-teal-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-teal-600 transition-colors disabled:opacity-50"
-            >
-              {loading ? 'Creando...' : 'Crear Usuario'}
-            </button>
-          </form>
-        </section>
-
-        <section className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
-          <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
-            <Users size={20} className="text-teal-500" /> Usuarios Existentes
-          </h3>
-          <div className="space-y-3">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-600">
+            <tr>
+              <th className="text-left px-6 py-4 text-sm font-bold text-slate-600 dark:text-slate-300">Email</th>
+              <th className="text-left px-6 py-4 text-sm font-bold text-slate-600 dark:text-slate-300">Rol</th>
+              <th className="text-left px-6 py-4 text-sm font-bold text-slate-600 dark:text-slate-300">Permisos</th>
+              <th className="text-right px-6 py-4 text-sm font-bold text-slate-600 dark:text-slate-300">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
             {users.map(user => (
-              <div key={user.id} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-teal-100 dark:bg-teal-900/50 rounded-full flex items-center justify-center text-teal-600 dark:text-teal-400 font-bold text-xs">
-                    {user.email[0].toUpperCase()}
+              <tr key={user.id} className="border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-teal-100 dark:bg-teal-900/50 rounded-full flex items-center justify-center text-teal-600 dark:text-teal-400 font-bold text-xs">
+                      {user.email[0].toUpperCase()}
+                    </div>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{user.email}</span>
                   </div>
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{user.email}</span>
-                </div>
-                <button
-                  onClick={() => handleDelete(user.id)}
-                  className="text-slate-400 hover:text-red-500 transition-colors"
+                </td>
+                <td className="px-6 py-4">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${user.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'}`}>
+                    {user.role === 'admin' ? 'Administrador' : 'Personal'}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-wrap gap-1">
+                    {user.role === 'admin' ? (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Acceso Total</span>
+                    ) : (
+                      Object.keys(user.permissions || {}).filter(k => user.permissions[k]).length > 0 ? (
+                        Object.keys(user.permissions || {}).filter(k => user.permissions[k]).map(key => (
+                          <span key={key} className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-xs">
+                            {key.replace('can_', '').replace('_', ' ')}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-400 dark:text-slate-500">Sin permisos</span>
+                      )
+                    )}
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => handleEdit(user)}
+                      className="text-slate-400 hover:text-teal-500 transition-colors"
+                      title="Editar"
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(user.id)}
+                      className="text-slate-400 hover:text-red-500 transition-colors"
+                      title="Eliminar"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white">
+                {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
+              </h3>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Email</label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                  Contraseña {editingUser && '(dejar vacío para no cambiar)'}
+                </label>
+                <input
+                  type="password"
+                  required={!editingUser}
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Rol</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
                 >
-                  <LogOut size={16} />
+                  <option value="staff">Personal</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+
+              {formData.role === 'staff' && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Permisos</label>
+                  <div className="space-y-2 bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.permissions.can_manage_appointments || false}
+                        onChange={() => togglePermission('can_manage_appointments')}
+                        className="w-4 h-4 text-teal-500 rounded focus:ring-2 focus:ring-teal-500/20"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-200">Gestionar Citas</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.permissions.can_view_settings || false}
+                        onChange={() => togglePermission('can_view_settings')}
+                        className="w-4 h-4 text-teal-500 rounded focus:ring-2 focus:ring-teal-500/20"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-200">Ver Configuración</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.permissions.can_manage_messages || false}
+                        onChange={() => togglePermission('can_manage_messages')}
+                        className="w-4 h-4 text-teal-500 rounded focus:ring-2 focus:ring-teal-500/20"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-200">Gestionar Mensajes</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-xl font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-teal-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-teal-600 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Guardando...' : (editingUser ? 'Actualizar' : 'Crear')}
                 </button>
               </div>
-            ))}
+            </form>
           </div>
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 };

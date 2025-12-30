@@ -14,7 +14,7 @@ const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
     try {
       const response = await api.login({ email, password });
       if (response.data.success) {
-        onLogin();
+        onLogin(response.data.user);
       }
     } catch (err) {
       setError('Credenciales inválidas. Intenta con admin@clinica.com / admin123');

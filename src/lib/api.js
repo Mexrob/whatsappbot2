@@ -33,6 +33,15 @@ export const api = {
     return res.json();
   },
 
+  async updateUser(id, data) {
+    const res = await fetch(`${API_URL}/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return res.json();
+  },
+
   // Availability
   async getAvailability() {
     const res = await fetch(`${API_URL}/availability`);

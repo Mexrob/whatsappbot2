@@ -63,4 +63,15 @@ try {
   // Column likely already exists
 }
 
+// Migration: Add role and permissions to users if not exists
+try {
+  db.prepare("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'staff' CHECK(role IN ('admin', 'staff'))").run();
+  db.prepare("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT '{}'").run();
+
+  // Update existing admin to have admin role
+  db.prepare("UPDATE users SET role = 'admin', permissions = '{\"all\": true}' WHERE email = 'admin@clinica.com'").run();
+} catch (error) {
+  // Columns likely already exist
+}
+
 module.exports = db;

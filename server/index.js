@@ -21,7 +21,7 @@ app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password);
   if (user) {
-    res.json({ success: true, user: { email: user.email } });
+    res.json({ success: true, user: { email: user.email, role: user.role, permissions: JSON.parse(user.permissions || '{}') } });
   } else {
     res.status(401).json({ success: false, message: 'Credenciales inválidas' });
   }
@@ -29,14 +29,35 @@ app.post('/api/login', (req, res) => {
 
 // User Management
 app.get('/api/users', (req, res) => {
-  const users = db.prepare('SELECT id, email FROM users').all();
+  const users = db.prepare('SELECT id, email, role, permissions FROM users').all();
+  users.forEach(u => {
+    u.permissions = JSON.parse(u.permissions || '{}');
+  });
   res.json(users);
 });
 
 app.post('/api/users', (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, role, permissions } = req.body;
   try {
-    db.prepare('INSERT INTO users (email, password) VALUES (?, ?)').run(email, password);
+    db.prepare('INSERT INTO users (email, password, role, permissions) VALUES (?, ?, ?, ?)').run(email, password, role || 'staff', JSON.stringify(permissions || {}));
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/users/:id', (req, res) => {
+  const { id } = req.params;
+  const { email, password, role, permissions } = req.body;
+
+  try {
+    if (password) {
+      db.prepare('UPDATE users SET email = ?, password = ?, role = ?, permissions = ? WHERE id = ?')
+        .run(email, password, role, JSON.stringify(permissions), id);
+    } else {
+      db.prepare('UPDATE users SET email = ?, role = ?, permissions = ? WHERE id = ?')
+        .run(email, role, JSON.stringify(permissions), id);
+    }
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -48,6 +69,14 @@ app.delete('/api/users/:id', (req, res) => {
   // Prevent deleting the last user or specific admin if restriction needed
   // For now simple delete
   try {
+    // Protect last admin
+    const userToDelete = db.prepare('SELECT role FROM users WHERE id = ?').get(id);
+    if (userToDelete && userToDelete.role === 'admin') {
+      const adminCount = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'admin'").get().count;
+      if (adminCount <= 1) {
+        throw new Error('No se puede eliminar el último administrador.');
+      }
+    }
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
     res.json({ success: true });
   } catch (error) {
