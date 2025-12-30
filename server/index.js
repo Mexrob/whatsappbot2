@@ -605,7 +605,7 @@ async function sendWhatsAppMessage(to, body, conversationId = null) {
     formattedTo = '+52' + formattedTo.substring(4);
   }
 
-  // --- ROUTE TO CHATWOOT IF ACTIVE ---
+  // --- SYNC WITH CHATWOOT IF ACTIVE ---
   if (process.env.ACTIVATE_CHATWOOT === 'true' && conversationId) {
     try {
       const cwUrl = `${process.env.CHATWOOT_URL}/api/v1/accounts/${process.env.CHATWOOT_ACCOUNT_ID}/conversations/${conversationId}/messages`;
@@ -617,14 +617,13 @@ async function sendWhatsAppMessage(to, body, conversationId = null) {
         },
         body: JSON.stringify({ content: body, message_type: 'outgoing' })
       });
-      console.log(`Message sent to Chatwoot conversation ${conversationId}`);
-      return;
+      console.log(`AI message synced to Chatwoot conversation ${conversationId}`);
     } catch (cwError) {
-      console.error('Error sending to Chatwoot, falling back to YCloud:', cwError);
+      console.error('Error syncing AI message to Chatwoot:', cwError);
     }
   }
 
-  // --- DIRECT YCLOUD ROUTE ---
+  // --- ALWAYS SEND TO YCLOUD (To reach the user's phone) ---
   const ycloudUrl = 'https://api.ycloud.com/v2/whatsapp/messages/sendDirectly';
   try {
     const response = await fetch(ycloudUrl, {
@@ -643,10 +642,6 @@ async function sendWhatsAppMessage(to, body, conversationId = null) {
     });
 
     const data = await response.json();
-    if (!response.ok) {
-      console.error('YCloud API Error:', data);
-      throw new Error(`YCloud API Error: ${data.message || response.statusText}`);
-    }
     console.log(`Message sent to ${formattedTo} via YCloud. ID: ${data.id}`);
   } catch (error) {
     console.error('Error sending WhatsApp message via YCloud:', error);
@@ -664,12 +659,15 @@ async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
     const cwUrl = `${process.env.CHATWOOT_URL}/api/v1/accounts/${accountId}`;
     const headers = { 'Content-Type': 'application/json', 'api_access_token': process.env.CHATWOOT_ACCESS_TOKEN };
 
+    console.log(`[Chatwoot Debug] Syncing message for ${phoneNumber}. Inbox: ${inboxId}`);
+
     // 1. Find or create contact
     let contactResponse = await fetch(`${cwUrl}/contacts/search?q=${phoneNumber}`, { headers });
     let contactData = await contactResponse.json();
     let contact = contactData.payload?.[0];
 
     if (!contact) {
+      console.log(`[Chatwoot Debug] Contact not found for ${phoneNumber}. Creating new contact...`);
       contactResponse = await fetch(`${cwUrl}/contacts`, {
         method: 'POST',
         headers,
@@ -679,7 +677,12 @@ async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
       contact = contactData.payload?.contact;
     }
 
-    if (!contact) return null;
+    if (!contact) {
+      console.error('[Chatwoot Debug] Failed to find or create contact');
+      return null;
+    }
+
+    console.log(`[Chatwoot Debug] Contact ID: ${contact.id}`);
 
     // 2. Find or create conversation
     let conversationResponse = await fetch(`${cwUrl}/contacts/${contact.id}/conversations`, { headers });
@@ -687,6 +690,7 @@ async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
     let conversation = conversationData.payload?.find(c => c.inbox_id == inboxId && c.status !== 'resolved');
 
     if (!conversation) {
+      console.log(`[Chatwoot Debug] No active conversation found for contact ${contact.id}. Creating new...`);
       conversationResponse = await fetch(`${cwUrl}/conversations`, {
         method: 'POST',
         headers,
@@ -696,18 +700,30 @@ async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
       conversation = conversationData;
     }
 
-    if (!conversation) return null;
+    if (!conversation || !conversation.id) {
+      console.error('[Chatwoot Debug] Failed to find or create conversation', conversation);
+      return null;
+    }
+
+    console.log(`[Chatwoot Debug] Conversation ID: ${conversation.id}. Posting message...`);
 
     // 3. Post message to Chatwoot
-    await fetch(`${cwUrl}/conversations/${conversation.id}/messages`, {
+    const msgRes = await fetch(`${cwUrl}/conversations/${conversation.id}/messages`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ content: messageContent, message_type: 'incoming' })
     });
 
+    if (!msgRes.ok) {
+      const msgError = await msgRes.json();
+      console.error('[Chatwoot Debug] Error posting message:', msgError);
+    } else {
+      console.log(`[Chatwoot Debug] Message synced successfully to conversation ${conversation.id}`);
+    }
+
     return conversation.id;
   } catch (error) {
-    console.error('Error syncing with Chatwoot:', error);
+    console.error('[Chatwoot Debug] Global error in syncWithChatwoot:', error);
     return null;
   }
 }
