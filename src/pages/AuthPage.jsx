@@ -70,15 +70,6 @@ const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
             {isLogin ? 'Iniciar Sesión' : 'Registrarse'}
           </button>
         </form>
-
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => setIsLogin(!isLogin)}
-            className="text-sm text-teal-600 font-medium hover:underline"
-          >
-            {isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia sesión'}
-          </button>
-        </div>
       </div>
     </div>
   );

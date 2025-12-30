@@ -298,41 +298,31 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     Usa un tono profesional, amable y estético. 
 
     REGLAS CRÍTICAS DE AGENDAMIENTO:
-    1. FLUJO NORMAL DE AGENDAMIENTO:
-       a) Primera vez: Usa 'get_available_slots' para mostrar horarios disponibles
-       b) Usuario elige horario: Responde SOLO CON TEXTO pidiendo su nombre (NO llames ninguna función)
-       c) Usuario da su nombre: Usa 'schedule_appointment' para confirmar la cita
+    1. DISPONIBILIDAD (REGLA DE ORO): NUNCA repitas horarios que viste en mensajes anteriores del chat. La agenda cambia constantemente. SIEMPRE que el usuario pregunte por horarios o disponibilidad, DEBES llamar a 'get_available_slots' de nuevo. Considera que cualquier lista de horarios en el historial de mensajes es OBSOLETA E INVÁLIDA. Solo el resultado de la función que llames AHORA es real.
     
-    2. ${justShownSlots ? '⚠️ ACABAS DE MOSTRAR HORARIOS EN TU ÚLTIMO MENSAJE. Si el usuario confirma uno (ej: "Sí, sábado 27 a las 11"), NO llames get_available_slots de nuevo. Solo pide su nombre con texto.' : 'Si necesitas mostrar horarios, usa get_available_slots.'}
+    2. AGENDAMIENTO (NUEVA CITA):
+       - Si el usuario confirma un horario Y ya tienes su nombre (${extractedName || 'desconocido'}): Llama a 'schedule_appointment' inmediatamente. No pidas confirmación, solo agenda.
+       - Si no tienes el nombre: Pídelo.
     
-    3. NUNCA llames funciones cuando solo necesitas pedir información al usuario (como su nombre).
+    3. REPROGRAMACIÓN:
+       - Usa 'get_my_appointments' para ver qué citas tiene el usuario.
+       - Usa 'reschedule_appointment' en cuanto tengas el ID y la nueva fecha.
     
-    4. Para agendar usa 'schedule_appointment' SOLO cuando:
-       - Ya tengas el nombre completo del paciente
-       - Ya tengas el horario específico que el usuario eligió
-       - El horario coincida con un slot disponible que mostraste
+    4. ACCIÓN OBLIGATORIA: Tienes PROHIBIDO decir "Estos son los horarios" o "He agendado" sin haber llamado a la función correspondiente en este turno. Si no aparece una llamada a función en tu respuesta, no puedes listar horarios.
     
-    5. Si el usuario dice algo como "sí", "sí me queda bien", "sábado 27 a las 11", etc., después de ver horarios:
-       - NO llames ninguna función
-       - Responde con texto: "¡Perfecto! ¿Cuál es tu nombre completo?"
+    5. No inventes IDs de citas ni nombres de pacientes.
     
-    6. Si el usuario quiere CAMBIAR, MOVER o REPROGRAMAR una cita:
-       - SIEMPRE usa 'get_my_appointments' PRIMERO para obtener los IDs de las citas.
-       - Una vez tengas el ID y la nueva fecha, usa 'reschedule_appointment'.
+    6. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
     
-    7. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
+    7. PROHIBICIÓN DE CÓDIGO: Tu respuesta debe ser 100% lenguaje natural. SIEMPRE ejecuta las funciones, no las menciones.
     
-    8. NUNCA uses placeholders como "[Nombre del paciente]" - siempre usa el nombre real.
+    8. REGLA DE ENLACES: El enlace debe terminar con un espacio o un salto de línea.
     
-    9. PROHIBICIÓN DE CÓDIGO: NUNCA muestres código, nombres de funciones o sintaxis de programación (como print(), default_api, python, etc.) al usuario. Tu respuesta debe ser 100% lenguaje natural. SIEMPRE ejecuta las funciones, no las menciones.
-    
-    10. REGLA DE ENLACES: NUNCA añadas puntos, comas o cualquier signo de puntuación inmediatamente después de una URL (ej: usa "aquí: https://enlace" en lugar de "aquí: https://enlace."). El enlace debe terminar con un espacio o un salto de línea.
-    
-    11. Sé concisa y natural en tus respuestas.
+    9. Sé concisa y natural. Ignora listas de horarios previas.
     
     ${extractedName
-        ? `\n[DATOS DEL PACIENTE] Nombre: ${extractedName}. YA TIENES EL NOMBRE. No lo pidas de nuevo. Si vas a agendar, usa este nombre exactamente.`
-        : `\n[DATOS DEL PACIENTE] Nombre: Desconocido. Si el usuario elige un horario, DEBES pedir su nombre completo antes de usar 'schedule_appointment'.`}`;
+        ? `\n[DATOS DEL PACIENTE] Nombre: ${extractedName}. YA TIENES EL NOMBRE. ÚSALO para agendar automáticamente.`
+        : `\n[DATOS DEL PACIENTE] Nombre: Desconocido. Pídelo antes de agendar.`}`;
 
     // Map history to Gemini format
     const chatHistory = history.reverse().map(m => ({
@@ -426,14 +416,22 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             const apptDateUTC = new Date(apptDateLocal.getTime() + (6 * 60 * 60 * 1000));
             const apptDateUTCString = apptDateUTC.toISOString().slice(0, 16);
 
-            const valid = db.prepare(`
+            const available = db.prepare(`
               SELECT id FROM availability 
-              WHERE datetime(?) >= datetime(start_time) 
-              AND datetime(?) < datetime(end_time)
-            `).get(apptDateUTCString, apptDateUTCString);
+              WHERE datetime(?) >= datetime(start_time, '-6 hours') 
+              AND datetime(?) < datetime(end_time, '-6 hours')
+            `).get(appointment_date, appointment_date);
 
-            if (!valid) {
-              aiResponse = "Lo siento, ese horario ya no está disponible o no está abierto en nuestra agenda. ¿Te gustaría ver otras opciones?";
+            const alreadyBooked = db.prepare(`
+              SELECT id FROM appointments 
+              WHERE datetime(appointment_date) = datetime(?) 
+              AND status != 'cancelled'
+            `).get(appointment_date);
+
+            if (!available) {
+              aiResponse = "Lo siento, ese horario no está abierto en nuestra agenda. ¿Te gustaría ver otras opciones?";
+            } else if (alreadyBooked) {
+              aiResponse = "Lo siento, ese horario ya ha sido reservado por otra persona justo ahora. ¿Podemos intentar con otro?";
             } else {
               db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
                 .run(phoneNumber, patient_name, appointment_date, appointment_type);
@@ -449,7 +447,18 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             }
           }
           else if (name === 'get_available_slots') {
-            const slots = db.prepare("SELECT start_time FROM availability WHERE start_time > datetime('now', '-6 hours') ORDER BY start_time ASC LIMIT 10").all();
+            const slots = db.prepare(`
+              SELECT start_time 
+              FROM availability 
+              WHERE datetime(start_time, '-6 hours') > datetime('now', '-6 hours') 
+              AND datetime(start_time, '-6 hours') NOT IN (
+                SELECT datetime(appointment_date) 
+                FROM appointments 
+                WHERE status != 'cancelled'
+              )
+              ORDER BY start_time ASC 
+              LIMIT 10
+            `).all();
             if (slots.length === 0) {
               aiResponse = `Por el momento no tengo horarios disponibles en el sistema. Por favor, intenta contactar directamente a ${settings.clinic_name}.`;
             } else {
@@ -476,25 +485,31 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             const { appointment_id, new_date } = args;
             console.log(`DEBUG: Executing reschedule_appointment. ID: ${appointment_id}, New Date: ${new_date}, Phone: ${phoneNumber}`);
 
-            // FIXED SQL: Using single quotes for 'confirmed' string literal
-            const result = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ? AND phone_number = ?")
-              .run(new_date, appointment_id, phoneNumber);
+            // Validation before reschedule
+            const openInAgenda = db.prepare(`
+              SELECT id FROM availability 
+              WHERE datetime(?) >= datetime(start_time, '-6 hours') 
+              AND datetime(?) < datetime(end_time, '-6 hours')
+            `).get(new_date, new_date);
 
-            console.log(`DEBUG: Update Result:`, result);
+            const alreadyBooked = db.prepare(`
+              SELECT id FROM appointments 
+              WHERE datetime(appointment_date) = datetime(?) 
+              AND status != 'cancelled'
+              AND id != ?
+            `).get(new_date, appointment_id);
 
-            if (result.changes > 0) {
-              const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
-                timeZone: 'America/Mexico_City',
-                dateStyle: 'long',
-                timeStyle: 'short'
-              });
-              aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
+            if (!openInAgenda) {
+              aiResponse = "Lo siento, ese horario no está disponible en nuestra agenda. ¿Te gustaría ver otras opciones?";
+            } else if (alreadyBooked) {
+              aiResponse = "Lo siento, ese nuevo horario ya está ocupado. ¿Te gustaría intentar con otro?";
             } else {
-              // Fallback: intentar actualizar solo por ID si falla con phone_number
-              const retry = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ?")
-                .run(new_date, appointment_id);
+              const result = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ? AND phone_number = ?")
+                .run(new_date, appointment_id, phoneNumber);
 
-              if (retry.changes > 0) {
+              console.log(`DEBUG: Update Result:`, result);
+
+              if (result.changes > 0) {
                 const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
                   timeZone: 'America/Mexico_City',
                   dateStyle: 'long',
@@ -502,7 +517,20 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
                 });
                 aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
               } else {
-                aiResponse = "No pude encontrar esa cita para reprogramarla. Por favor, confírmame el horario actual.";
+                // Fallback: intentar actualizar solo por ID si falla con phone_number
+                const retry = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ?")
+                  .run(new_date, appointment_id);
+
+                if (retry.changes > 0) {
+                  const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
+                    timeZone: 'America/Mexico_City',
+                    dateStyle: 'long',
+                    timeStyle: 'short'
+                  });
+                  aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
+                } else {
+                  aiResponse = "No pude encontrar esa cita para reprogramarla. Por favor, confírmame el horario actual.";
+                }
               }
             }
           }
