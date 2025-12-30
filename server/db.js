@@ -50,10 +50,17 @@ db.exec(`
 
   -- Seed initial data
   INSERT OR IGNORE INTO clinic_settings (id, clinic_name, services) 
-  VALUES (1, 'Erika Aesthetic Clinic', 'Limpieza Facial, Botox, Rellenos, Peeling');
+  VALUES (1, 'Demo Clinic', 'Limpieza Facial, Botox, Rellenos, Peeling');
 
   INSERT OR IGNORE INTO users (email, password)
   VALUES ('admin@clinica.com', 'admin123');
 `);
+
+// Migration: Add bot_name if not exists
+try {
+  db.prepare("ALTER TABLE clinic_settings ADD COLUMN bot_name TEXT DEFAULT 'AI Assistant'").run();
+} catch (error) {
+  // Column likely already exists
+}
 
 module.exports = db;

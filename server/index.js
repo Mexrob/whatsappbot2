@@ -64,9 +64,9 @@ app.get('/api/settings', (req, res) => {
 app.put('/api/settings', (req, res) => {
   console.log('DEBUG: Received settings update request:', req.body);
   try {
-    const { clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone, clinic_logo } = req.body;
-    const result = db.prepare('UPDATE clinic_settings SET clinic_name = ?, clinic_address = ?, clinic_phone = ?, services = ?, whatsapp_webhook_url = ?, timezone = ?, clinic_logo = ? WHERE id = 1')
-      .run(clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone, clinic_logo);
+    const { clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone, clinic_logo, bot_name } = req.body;
+    const result = db.prepare('UPDATE clinic_settings SET clinic_name = ?, clinic_address = ?, clinic_phone = ?, services = ?, whatsapp_webhook_url = ?, timezone = ?, clinic_logo = ?, bot_name = ? WHERE id = 1')
+      .run(clinic_name, clinic_address, clinic_phone, services, whatsapp_webhook_url, timezone, clinic_logo, bot_name);
     console.log('DEBUG: Settings update result:', result);
     res.json({ success: true });
   } catch (error) {
@@ -260,7 +260,8 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     // 3. Call Gemini
     const patientRecord = db.prepare('SELECT name FROM patients WHERE phone_number = ?').get(phoneNumber);
     const extractedName = patientRecord ? patientRecord.name : null;
-    const systemPrompt = `Eres Erika, la asistente virtual de ${settings.clinic_name}. 
+    const botName = settings.bot_name || 'AI Assistant';
+    const systemPrompt = `Eres ${botName}, la asistente virtual de ${settings.clinic_name}. 
     Tu objetivo es agendar citas, reprogramarlas y resolver dudas. 
     Hora actual: ${localTime}.
     Servicios: ${settings.services}.
@@ -370,14 +371,14 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     const geminiData = await geminiRes.json();
     console.log('Gemini Response Data:', JSON.stringify(geminiData));
 
-    let aiResponse = "Lo siento, Erika está teniendo problemas de conexión.";
+    let aiResponse = `Lo siento, ${botName} está teniendo problemas de conexión.`;
 
     if (geminiData.error) {
       console.error('Gemini API Error:', geminiData.error);
       if (geminiData.error.code === 429) {
-        aiResponse = "Erika ha superado su límite mensual de mensajes gratuitos. Por favor, revisa tu cuota en Google AI Studio o intenta de nuevo mañana.";
+        aiResponse = `${botName} ha superado su límite mensual de mensajes gratuitos. Por favor, revisa tu cuota en Google AI Studio o intenta de nuevo mañana.`;
       } else {
-        aiResponse = `Erika tiene un inconveniente técnico (Error ${geminiData.error.code}). Por favor, contacta a soporte.`;
+        aiResponse = `${botName} tiene un inconveniente técnico (Error ${geminiData.error.code}). Por favor, contacta a soporte.`;
       }
     } else {
       const candidate = geminiData.candidates?.[0];
@@ -575,7 +576,10 @@ setInterval(() => {
         timeZone: 'America/Mexico_City'
       });
 
-      const message = `👋 Hola ${appt.patient_name}, paso a recordarte de parte de Erika AI que tienes una cita de ${appt.appointment_type} el ${date}. ¡Nos vemos pronto!`;
+      const settings = db.prepare('SELECT bot_name FROM clinic_settings WHERE id = 1').get();
+      const botName = settings ? (settings.bot_name || 'AI Assistant') : 'AI Assistant';
+
+      const message = `👋 Hola ${appt.patient_name}, paso a recordarte de parte de ${botName} que tienes una cita de ${appt.appointment_type} el ${date}. ¡Nos vemos pronto!`;
 
       await sendWhatsAppMessage(appt.phone_number, message);
 

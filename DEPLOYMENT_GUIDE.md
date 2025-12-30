@@ -45,7 +45,7 @@
 
 ### 3. Acceso SSH al VPS
 ```bash
-ssh root@TU_IP_VPS
+ssh root@154.12.247.115
 ```
 
 ---
@@ -54,7 +54,7 @@ ssh root@TU_IP_VPS
 
 ### 1.1 Conectar al VPS
 ```bash
-ssh root@TU_IP_VPS
+ssh root@154.12.247.115
 ```
 
 ### 1.2 Actualizar el sistema
@@ -102,14 +102,14 @@ Ve a tu proveedor de dominio y agrega estos registros DNS:
 
 | Tipo | Nombre | Valor | TTL |
 |------|--------|-------|-----|
-| A | @ | 123.45.67.89 | 3600 |
-| A | www | 123.45.67.89 | 3600 |
+| A | @ | 154.12.247.115 | 3600 |
+| A | www | 154.12.247.115 | 3600 |
 | CNAME | api | tu-dominio.com | 3600 |
 
 **Ejemplo con Cloudflare:**
 ```
-A     @      123.45.67.89    Auto
-A     www    123.45.67.89    Auto
+A     @      154.12.247.115    Auto
+A     www    154.12.247.115    Auto
 ```
 
 ### 2.3 Verificar propagación DNS (espera 5-30 minutos)

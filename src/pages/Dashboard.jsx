@@ -63,10 +63,15 @@ const Dashboard = ({ onLogout }) => {
     fetchSettings();
   }, []);
 
+
+
   const fetchSettings = async () => {
     try {
       const response = await api.getSettings();
       setSettings(response.data);
+      if (response.data && response.data.clinic_name) {
+        document.title = response.data.clinic_name;
+      }
     } catch (error) {
       console.error('Error fetching settings:', error);
     }
@@ -106,7 +111,7 @@ const Dashboard = ({ onLogout }) => {
             )}
           </div>
           <h1 className="font-bold text-slate-800 dark:text-white leading-tight">
-            {settings?.clinic_name || 'Erika AI'}
+            {settings?.clinic_name || 'Clinic AI'}
           </h1>
         </div>
 
@@ -987,7 +992,8 @@ const SettingsTab = ({ settings, onUpdate }) => {
     services: '',
     whatsapp_webhook_url: '',
     timezone: 'America/Mexico_City',
-    clinic_logo: ''
+    clinic_logo: '',
+    bot_name: ''
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -1001,7 +1007,8 @@ const SettingsTab = ({ settings, onUpdate }) => {
         services: settings.services || '',
         whatsapp_webhook_url: settings.whatsapp_webhook_url || '',
         timezone: settings.timezone || 'America/Mexico_City',
-        clinic_logo: settings.clinic_logo || ''
+        clinic_logo: settings.clinic_logo || '',
+        bot_name: settings.bot_name || ''
       });
     }
   }, [settings]);
@@ -1073,11 +1080,21 @@ const SettingsTab = ({ settings, onUpdate }) => {
             </div>
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Nombre de la Clínica</label>
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Nombre de la empresa</label>
                 <input
                   type="text"
                   value={formData.clinic_name}
                   onChange={(e) => setFormData({ ...formData, clinic_name: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Nombre del Asistente (Bot)</label>
+                <input
+                  type="text"
+                  value={formData.bot_name}
+                  onChange={(e) => setFormData({ ...formData, bot_name: e.target.value })}
+                  placeholder="Ej. AI Assistant"
                   className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
                 />
               </div>

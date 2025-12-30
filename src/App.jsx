@@ -6,7 +6,7 @@ import { api } from './lib/api'
 
 function App() {
   const [view, setView] = useState('landing');
-  const [clinicName, setClinicName] = useState('Erika IA');
+  const [clinicName, setClinicName] = useState('Clinic AI');
   const [clinicLogo, setClinicLogo] = useState(null);
 
   useEffect(() => {
@@ -26,6 +26,7 @@ function App() {
     api.getSettings().then(res => {
       if (res.data?.clinic_name) {
         setClinicName(res.data.clinic_name);
+        document.title = res.data.clinic_name; // Update browser tab title
       }
       if (res.data?.clinic_logo) {
         setClinicLogo(res.data.clinic_logo);

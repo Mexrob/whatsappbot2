@@ -12,7 +12,7 @@
 ### 1️⃣ Preparar VPS (5 min)
 ```bash
 # Conectar
-ssh root@TU_IP_VPS
+ssh root@154.12.247.115
 
 # Instalar todo lo necesario
 apt update && apt upgrade -y
