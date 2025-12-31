@@ -23,6 +23,8 @@ db.exec(`
     phone_number TEXT NOT NULL,
     message_content TEXT NOT NULL,
     sender TEXT CHECK (sender IN ('user', 'assistant')),
+    message_type TEXT DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'document', 'audio', 'video')),
+    media_url TEXT,
     received_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -70,6 +72,14 @@ try {
 
   // Update existing admin to have admin role
   db.prepare("UPDATE users SET role = 'admin', permissions = '{\"all\": true}' WHERE email = 'admin@clinica.com'").run();
+} catch (error) {
+  // Columns likely already exist
+}
+
+// Migration: Add message_type and media_url to messages if not exists
+try {
+  db.prepare("ALTER TABLE messages ADD COLUMN message_type TEXT DEFAULT 'text' CHECK(message_type IN ('text', 'image', 'document', 'audio', 'video'))").run();
+  db.prepare("ALTER TABLE messages ADD COLUMN media_url TEXT").run();
 } catch (error) {
   // Columns likely already exist
 }

@@ -25,7 +25,14 @@ import {
   Trash2,
   Trash,
   Phone,
-  LayoutGrid
+  LayoutGrid,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  Music,
+  Video,
+  Download,
+  ExternalLink
 } from 'lucide-react';
 
 const SidebarItem = ({ id, iconComponent: Icon, label, activeTab, onClick }) => ( // eslint-disable-line no-unused-vars
@@ -49,6 +56,8 @@ const Dashboard = ({ onLogout }) => {
     return localStorage.getItem('theme') === 'dark';
   });
   const [currentUser, setCurrentUser] = useState(null);
+  const [isCompact, setIsCompact] = useState(false);
+  const [targetPhone, setTargetPhone] = useState(null);
 
   useEffect(() => {
     // Load user from session
@@ -56,6 +65,17 @@ const Dashboard = ({ onLogout }) => {
     if (session) {
       const { user } = JSON.parse(session);
       setCurrentUser(user);
+    }
+
+    // Check for compact view and phone filter
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'compact') {
+      setIsCompact(true);
+      setActiveTab('appointments');
+    }
+    const phone = params.get('phone_number');
+    if (phone) {
+      setTargetPhone(phone);
     }
   }, []);
 
@@ -96,147 +116,151 @@ const Dashboard = ({ onLogout }) => {
   };
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-900 overflow-hidden relative transition-colors duration-200">
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        className="md:hidden absolute top-4 left-4 z-50 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
-      >
-        {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
+    <div className={`flex h-screen bg-slate-50 dark:bg-slate-900 overflow-hidden relative transition-colors duration-200 ${isCompact ? 'p-0' : ''}`}>
+      {/* Mobile Menu Button - Hide in compact view */}
+      {!isCompact && (
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="md:hidden fixed top-4 left-4 z-50 p-3 bg-white dark:bg-slate-800 shadow-lg rounded-xl text-slate-600 dark:text-slate-300"
+        >
+          {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      )}
 
       {/* Sidebar Overlay */}
-      {isMobileMenuOpen && (
+      {!isCompact && isMobileMenuOpen && (
         <div
           className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col p-4 transition-transform duration-300 md:relative md:translate-x-0
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
-        <div className="flex items-center gap-3 px-4 mb-8">
-          <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-200 overflow-hidden shrink-0">
-            {settings?.clinic_logo ? (
-              <img src={settings.clinic_logo} alt="Logo" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-white font-bold text-xl">{(settings?.clinic_name || 'E')[0]}</span>
-            )}
-          </div>
-          <h1 className="font-bold text-slate-800 dark:text-white leading-tight">
-            {settings?.clinic_name || 'Clinic AI'}
-          </h1>
-        </div>
-
-        <nav className="flex-1 space-y-2 mt-8 md:mt-0">
-          {hasPermission('can_manage_messages') && (
-            <SidebarItem
-              id="messages"
-              iconComponent={MessageSquare}
-              label="Mensajes"
-              activeTab={activeTab}
-              onClick={(id) => {
-                setActiveTab(id);
-                setIsMobileMenuOpen(false);
-              }}
-            />
-          )}
-          {hasPermission('can_manage_appointments') && (
-            <SidebarItem
-              id="appointments"
-              iconComponent={List}
-              label="Citas"
-              activeTab={activeTab}
-              onClick={(id) => {
-                setActiveTab(id);
-                setIsMobileMenuOpen(false);
-              }}
-            />
-          )}
-          {hasPermission('can_manage_appointments') && (
-            <SidebarItem
-              id="calendar"
-              iconComponent={Calendar}
-              label="Agenda"
-              activeTab={activeTab}
-              onClick={(id) => {
-                setActiveTab(id);
-                setIsMobileMenuOpen(false);
-              }}
-            />
-          )}
-          {hasPermission('can_view_settings') && (
-            <SidebarItem
-              id="settings"
-              iconComponent={Settings}
-              label="Configuración"
-              activeTab={activeTab}
-              onClick={(id) => {
-                setActiveTab(id);
-                setIsMobileMenuOpen(false);
-              }}
-            />
-          )}
-          {(currentUser?.role === 'admin' || !currentUser) && (
-            <SidebarItem
-              id="users"
-              iconComponent={Users}
-              label="Usuarios"
-              activeTab={activeTab}
-              onClick={(id) => {
-                setActiveTab(id);
-                setIsMobileMenuOpen(false);
-              }}
-            />
-          )}
-        </nav>
-
-        <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700 pb-2">
-          {/* Dark Mode Toggle */}
-          <button
-            onClick={toggleDarkMode}
-            className="w-full flex items-center gap-3 px-4 py-2 mb-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl transition-colors"
-          >
-            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-            <span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
-          </button>
-
-          <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
-          <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl mx-2">
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 29/12-12:00 Features++</p>
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
-              <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">Auto-Sync: Activado</p>
+      {/* Sidebar - Hide in compact view */}
+      {!isCompact && (
+        <aside className={`
+          fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col p-4 transition-transform duration-300 md:relative md:translate-x-0
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}>
+          <div className="flex items-center gap-3 px-4 mb-8">
+            <div className="w-10 h-10 bg-teal-500 rounded-xl flex items-center justify-center shadow-lg shadow-teal-200 overflow-hidden shrink-0">
+              {settings?.clinic_logo ? (
+                <img src={settings.clinic_logo} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white font-bold text-xl">{(settings?.clinic_name || 'E')[0]}</span>
+              )}
             </div>
-            <button
-              onClick={() => window.location.reload()}
-              className="w-full py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
-            >
-              Refrescar Ahora
-            </button>
+            <h1 className="font-bold text-slate-800 dark:text-white leading-tight">
+              {settings?.clinic_name || 'Clinic AI'}
+            </h1>
           </div>
-        </div>
 
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-red-500 transition-colors mt-2"
-        >
-          <LogOut size={20} />
-          <span className="font-medium">Cerrar Sesión</span>
-        </button>
-      </aside>
+          <nav className="flex-1 space-y-2 mt-8 md:mt-0">
+            {hasPermission('can_manage_messages') && (
+              <SidebarItem
+                id="messages"
+                iconComponent={MessageSquare}
+                label="Mensajes"
+                activeTab={activeTab}
+                onClick={(id) => {
+                  setActiveTab(id);
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+            )}
+            {hasPermission('can_manage_appointments') && (
+              <SidebarItem
+                id="appointments"
+                iconComponent={List}
+                label="Citas"
+                activeTab={activeTab}
+                onClick={(id) => {
+                  setActiveTab(id);
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+            )}
+            {hasPermission('can_manage_appointments') && (
+              <SidebarItem
+                id="calendar"
+                iconComponent={Calendar}
+                label="Agenda"
+                activeTab={activeTab}
+                onClick={(id) => {
+                  setActiveTab(id);
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+            )}
+            {hasPermission('can_view_settings') && (
+              <SidebarItem
+                id="settings"
+                iconComponent={Settings}
+                label="Configuración"
+                activeTab={activeTab}
+                onClick={(id) => {
+                  setActiveTab(id);
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+            )}
+            {(currentUser?.role === 'admin' || !currentUser) && (
+              <SidebarItem
+                id="users"
+                iconComponent={Users}
+                label="Usuarios"
+                activeTab={activeTab}
+                onClick={(id) => {
+                  setActiveTab(id);
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+            )}
+          </nav>
+
+          <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700 pb-2">
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className="w-full flex items-center gap-3 px-4 py-2 mb-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl transition-colors"
+            >
+              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              <span className="font-medium">{isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}</span>
+            </button>
+
+            <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
+            <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl mx-2">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 29/12-12:00 Features++</p>
+              <div className="flex items-center gap-1.5 mb-2">
+                <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
+                <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">Auto-Sync: Activado</p>
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+              >
+                Refrescar Ahora
+              </button>
+            </div>
+          </div>
+
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-red-500 transition-colors mt-2"
+          >
+            <LogOut size={20} />
+            <span className="font-medium">Cerrar Sesión</span>
+          </button>
+        </aside>
+      )}
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden w-full pt-16 md:pt-0">
+      <main className={`flex-1 flex flex-col overflow-hidden w-full ${isCompact ? 'pt-0' : 'pt-16 md:pt-0'}`}>
         {(() => {
           switch (activeTab) {
             case 'messages':
               return <MessagesTab />;
             case 'appointments': // Citas List View
-              return <AppointmentsTab />;
+              return <AppointmentsTab phoneFilter={targetPhone} isCompact={isCompact} />;
             case 'calendar': // Agenda Grid View
               return <CalendarTab />;
             case 'settings':
@@ -309,15 +333,17 @@ const MessagesTab = () => {
     }
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !selectedPhone) return;
+  const handleSendMessage = async (e, media = null) => {
+    e?.preventDefault(); // e might be null if called from onFileSelect
+    if (!newMessage.trim() && !media) return;
 
     try {
       await api.sendMessage({
         phone_number: selectedPhone,
         message_content: newMessage,
-        sender: 'assistant'
+        sender: 'assistant',
+        message_type: media ? media.type : 'text',
+        media_url: media ? media.url : null
       });
       setNewMessage('');
       await fetchMessages();
@@ -413,7 +439,9 @@ const MessagesTab = () => {
 // Extracted ChatWindow for better state/scroll management
 const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, onBack }) => {
   const scrollRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [isAiPaused, setIsAiPaused] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -453,14 +481,46 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
       return;
     }
     try {
-      await api.updateChatName({
-        phone_number: activeChat.phone_number,
-        name: tempName
-      });
+      // Assuming an API call to update patient name
+      // await api.updatePatientName(activeChat.phone_number, tempName);
+      // For now, just update locally or refetch messages
       setIsEditingName(false);
+      // You might want to trigger a refetch of messages or update activeChat.patient_name directly
     } catch (error) {
       console.error('Error updating name:', error);
       alert('Error al actualizar nombre');
+    }
+  };
+
+  const onFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        let type = 'document';
+        if (file.type.startsWith('image/')) type = 'image';
+        else if (file.type.startsWith('video/')) type = 'video';
+        else if (file.type.startsWith('audio/')) type = 'audio';
+
+        handleSendMessage(null, { type, url: data.url });
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Error al subir archivo');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -532,7 +592,52 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
         {[...activeChat.messages].reverse().map((msg, i) => (
           <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
             <div className={`${msg.sender === 'user' ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200' : 'bg-teal-500 text-white'} p-3 rounded-2xl ${msg.sender === 'user' ? 'rounded-tl-none' : 'rounded-tr-none'} shadow-sm max-w-[85%] md:max-w-md transition-all`}>
-              <p className="text-sm md:text-base break-words">{msg.message_content}</p>
+
+              {/* Media Rendering */}
+              {msg.message_type === 'image' && msg.media_url && (
+                <div className="mb-2 rounded-lg overflow-hidden border border-slate-100 dark:border-slate-700">
+                  <a href={msg.media_url} target="_blank" rel="noopener noreferrer">
+                    <img src={msg.media_url} alt="Shared" className="max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity" />
+                  </a>
+                </div>
+              )}
+
+              {msg.message_type === 'video' && msg.media_url && (
+                <div className="mb-2 rounded-lg overflow-hidden bg-black aspect-video flex items-center justify-center">
+                  <video src={msg.media_url} controls className="max-w-full max-h-full" />
+                </div>
+              )}
+
+              {msg.message_type === 'audio' && msg.media_url && (
+                <div className="mb-2 p-2 rounded-lg bg-teal-600/20 dark:bg-slate-700/50 flex items-center gap-3">
+                  <Music className={msg.sender === 'user' ? 'text-teal-500' : 'text-white'} size={20} />
+                  <audio src={msg.media_url} controls className="h-8 max-w-[200px]" />
+                </div>
+              )}
+
+              {msg.message_type === 'document' && msg.media_url && (
+                <div className="mb-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="p-2 bg-teal-100 dark:bg-teal-900/30 rounded-lg text-teal-600">
+                      <FileText size={20} />
+                    </div>
+                    <span className="text-xs font-medium truncate text-slate-600 dark:text-slate-400">Documento</span>
+                  </div>
+                  <a
+                    href={msg.media_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 text-slate-500"
+                  >
+                    <Download size={16} />
+                  </a>
+                </div>
+              )}
+
+              {msg.message_content && (
+                <p className="text-sm md:text-base break-words">{msg.message_content}</p>
+              )}
+
               <div className="flex items-center justify-end gap-1 mt-1">
                 <span className={`text-[10px] ${msg.sender === 'user' ? 'text-slate-400 dark:text-slate-500' : 'text-teal-100'}`}>
                   {(() => {
@@ -552,21 +657,38 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
         ))}
       </div>
 
-      <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shrink-0">
+      <form onSubmit={(e) => handleSendMessage(e)} className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shrink-0">
         <div className="flex gap-3 items-center">
           <input
+            type="file"
+            ref={fileInputRef}
+            onChange={onFileSelect}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="text-slate-400 hover:text-teal-500 p-2 transition-colors disabled:opacity-50"
+            title="Adjuntar archivo"
+          >
+            {isUploading ? <div className="animate-spin rounded-full h-5 w-5 border-2 border-teal-500 border-t-transparent" /> : <Paperclip size={22} />}
+          </button>
+
+          <input
             type="text"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Escribe un mensaje..."
-            className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full px-4 md:px-6 py-2 md:py-3 outline-none focus:ring-2 focus:ring-teal-500/20 text-slate-800 dark:text-white dark:placeholder-slate-400 text-sm md:text-base"
+            value={newMessage}
+            disabled={isUploading}
+            onChange={(e) => setNewMessage(e.target.value)}
+            className="flex-1 bg-slate-100 dark:bg-slate-900 border-none rounded-xl px-4 py-3 text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20 transition-all text-sm md:text-base"
           />
           <button
             type="submit"
-            className="w-10 h-10 md:w-12 md:h-12 bg-teal-500 rounded-full flex items-center justify-center text-white hover:bg-teal-600 transition-colors shrink-0"
+            disabled={(!newMessage.trim() && !isUploading) || isUploading}
+            className="bg-teal-500 text-white p-3 rounded-xl hover:bg-teal-600 transition-all shadow-lg shadow-teal-200 dark:shadow-teal-900/20 disabled:opacity-50 disabled:shadow-none translate-y-[1px]"
           >
-            <Send size={18} className="md:hidden" />
-            <Send size={20} className="hidden md:block" />
+            <Send size={20} />
           </button>
         </div>
       </form>
@@ -574,12 +696,12 @@ const ChatWindow = ({ activeChat, newMessage, setNewMessage, handleSendMessage, 
   );
 };
 
-const AppointmentsTab = () => {
+const AppointmentsTab = ({ phoneFilter, isCompact }) => {
   const [appointments, setAppointments] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     patient_name: '',
-    phone_number: '',
+    phone_number: phoneFilter || '',
     appointment_date: '',
     appointment_type: ''
   });
@@ -595,7 +717,16 @@ const AppointmentsTab = () => {
   const fetchAppointments = async () => {
     try {
       const response = await api.getAppointments();
-      setAppointments(response.data);
+      let data = response.data;
+      if (phoneFilter) {
+        // Normalize for comparison
+        const normalizedFilter = phoneFilter.replace(/\D/g, '');
+        data = data.filter(appt => {
+          const apptPhone = appt.phone_number.replace(/\D/g, '');
+          return apptPhone.includes(normalizedFilter) || normalizedFilter.includes(apptPhone);
+        });
+      }
+      setAppointments(data);
     } catch (error) {
       console.error('Error fetching appointments:', error);
     }
@@ -653,28 +784,32 @@ const AppointmentsTab = () => {
   ];
 
   return (
-    <div className="p-8 overflow-y-auto h-full">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Gestión de Citas</h2>
+    <div className={`${isCompact ? 'p-2' : 'p-8'} overflow-y-auto h-full`}>
+      <div className={`flex justify-between items-center ${isCompact ? 'mb-4' : 'mb-8'}`}>
+        <h2 className={`${isCompact ? 'text-lg' : 'text-2xl'} font-bold text-slate-800 dark:text-white`}>
+          {isCompact ? 'Citas del Paciente' : 'Gestión de Citas'}
+        </h2>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="bg-teal-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 font-medium hover:bg-teal-600 transition-colors shadow-lg shadow-teal-200"
+          className="bg-teal-500 text-white px-3 py-1.5 rounded-xl flex items-center gap-2 font-medium hover:bg-teal-600 transition-colors shadow-lg shadow-teal-200 text-sm"
         >
-          <Plus size={20} /> Nueva Cita
+          <Plus size={16} /> {isCompact ? 'Nueva' : 'Nueva Cita'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
-            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-2">{stat.label}</p>
-            <div className="flex items-end gap-3">
-              <span className="text-3xl font-bold text-slate-800 dark:text-white">{stat.value}</span>
-              <div className={`w-2 h-2 rounded-full mb-2 ${stat.color}`} />
+      {!isCompact && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {stats.map((stat) => (
+            <div key={stat.label} className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium mb-2">{stat.label}</p>
+              <div className="flex items-end gap-3">
+                <span className="text-3xl font-bold text-slate-800 dark:text-white">{stat.value}</span>
+                <div className={`w-2 h-2 rounded-full mb-2 ${stat.color}`} />
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden">
         {activeMenu && (
@@ -983,7 +1118,7 @@ function CalendarTab() {
                         : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}
                     `}
                   >
-                    {isAvailable && (
+                    {isAvailable && !appointment && (
                       <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-green-500" />
                     )}
 
