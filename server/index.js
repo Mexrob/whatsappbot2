@@ -314,6 +314,26 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
   const profileName = inboundData.customerProfile?.name;
   let messageType = 'text';
   let mediaUrl = null;
+  const recipientNumber = inboundData.to;
+
+  if (recipientNumber && process.env.YCLOUD_FROM && recipientNumber !== process.env.YCLOUD_FROM) {
+    console.log(`Webhook ignored. Recipient ${recipientNumber} does not match YCLOUD_FROM ${process.env.YCLOUD_FROM}`);
+
+    // Forward to other instances if configured
+    if (process.env.FORWARD_WEBHOOK_URLS) {
+      const urls = process.env.FORWARD_WEBHOOK_URLS.split(',').map(u => u.trim());
+      for (const url of urls) {
+        console.log(`Forwarding webhook to: ${url}`);
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req.body)
+        }).catch(err => console.error(`Error forwarding webhook to ${url}:`, err.message));
+      }
+    }
+
+    return res.status(200).send('OK');
+  }
 
   // Handle Media
   if (inboundData.image) {
@@ -347,7 +367,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         .run(phoneNumber, profileName);
     }
 
-    console.log('Webhook triggered (YCloud). From:', phoneNumber, 'Type:', messageType, 'Body:', Body);
+    console.log(`Webhook triggered (YCloud). To: ${recipientNumber} From: ${phoneNumber} Type: ${messageType} Body: ${Body}`);
     // 1. Save user message
     db.prepare('INSERT INTO messages (phone_number, message_content, sender, message_type, media_url, received_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(phoneNumber, Body, 'user', messageType, mediaUrl, new Date().toISOString());
@@ -468,7 +488,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       }
     ];
 
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -479,7 +499,10 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     });
 
     const geminiData = await geminiRes.json();
-    console.log('Gemini Response Data:', JSON.stringify(geminiData));
+    if (geminiData.error) {
+      console.error('Gemini API Error Detail:', JSON.stringify(geminiData.error, null, 2));
+    }
+    console.log('Gemini Response Data status:', geminiRes.status);
 
     let aiResponse = `Lo siento, ${botName} está teniendo problemas de conexión.`;
 
@@ -704,6 +727,7 @@ async function sendWhatsAppMessage(to, body, conversationId = null, message_type
     });
 
     const data = await response.json();
+    console.log(`YCloud API Response:`, JSON.stringify(data));
     console.log(`Message sent to ${formattedTo} via YCloud. ID: ${data.id}`);
   } catch (error) {
     console.error('Error sending WhatsApp message via YCloud:', error);
@@ -713,7 +737,10 @@ async function sendWhatsAppMessage(to, body, conversationId = null, message_type
 
 // Helper: Sync with Chatwoot (Forward incoming message)
 async function syncWithChatwoot(phoneNumber, messageContent, senderRole = 'user', message_type = 'text', media_url = null) {
-  if (process.env.ACTIVATE_CHATWOOT !== 'true') return null;
+  if (process.env.ACTIVATE_CHATWOOT !== 'true') {
+    console.log('[Chatwoot] Disabled by env var');
+    return null;
+  }
 
   try {
     const accountId = process.env.CHATWOOT_ACCOUNT_ID;

@@ -15,7 +15,8 @@ db.exec(`
     services TEXT,
     about_clinic TEXT,
     whatsapp_webhook_url TEXT,
-    timezone TEXT DEFAULT 'America/Mexico_City'
+    timezone TEXT DEFAULT 'America/Mexico_City',
+    clinic_logo TEXT
   );
 
   CREATE TABLE IF NOT EXISTS messages (
@@ -50,6 +51,17 @@ db.exec(`
     end_time DATETIME NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS patients (
+    phone_number TEXT PRIMARY KEY,
+    name TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS chat_status (
+    phone_number TEXT PRIMARY KEY,
+    is_ai_paused INTEGER DEFAULT 0,
+    chatwoot_conversation_id INTEGER
+  );
+
   -- Seed initial data
   INSERT OR IGNORE INTO clinic_settings (id, clinic_name, services) 
   VALUES (1, 'Demo Clinic', 'Limpieza Facial, Botox, Rellenos, Peeling');
@@ -61,6 +73,13 @@ db.exec(`
 // Migration: Add bot_name if not exists
 try {
   db.prepare("ALTER TABLE clinic_settings ADD COLUMN bot_name TEXT DEFAULT 'AI Assistant'").run();
+} catch (error) {
+  // Column likely already exists
+}
+
+// Migration: Add clinic_logo if not exists
+try {
+  db.prepare("ALTER TABLE clinic_settings ADD COLUMN clinic_logo TEXT").run();
 } catch (error) {
   // Column likely already exists
 }
