@@ -10,6 +10,11 @@ const db = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Deduplication cache
+const processedMessages = new Set();
+// Clean up cache every hour
+setInterval(() => processedMessages.clear(), 3600000);
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -306,8 +311,16 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
   // Verify it's an inbound message
   if (type !== 'whatsapp.inbound_message.received' || !inboundData) {
-    return res.status(200).send('OK'); // Acknowledge other event types (deliveries, etc.)
+    return res.status(200).send('OK');
   }
+
+  // Deduplication
+  const messageId = inboundData.id;
+  if (messageId && processedMessages.has(messageId)) {
+    console.log(`[Webhook] Duplicate message ignored: ${messageId}`);
+    return res.status(200).send('OK');
+  }
+  if (messageId) processedMessages.add(messageId);
 
   let Body = inboundData.text?.body || '';
   let phoneNumber = inboundData.from;
@@ -408,32 +421,17 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     Dirección: ${settings.clinic_address}.
     Usa un tono profesional, amable y estético. 
 
-    REGLAS CRÍTICAS DE AGENDAMIENTO:
-    1. DISPONIBILIDAD (REGLA DE ORO): NUNCA repitas horarios que viste en mensajes anteriores del chat. La agenda cambia constantemente. SIEMPRE que el usuario pregunte por horarios o disponibilidad, DEBES llamar a 'get_available_slots' de nuevo. Considera que cualquier lista de horarios en el historial de mensajes es OBSOLETA E INVÁLIDA. Solo el resultado de la función que llames AHORA es real.
-    
-    2. AGENDAMIENTO (NUEVA CITA):
-       - Si el usuario confirma un horario Y ya tienes su nombre (${extractedName || 'desconocido'}): Llama a 'schedule_appointment' inmediatamente. No pidas confirmación, solo agenda.
-       - Si no tienes el nombre: Pídelo.
-    
-    3. REPROGRAMACIÓN:
-       - Usa 'get_my_appointments' para ver qué citas tiene el usuario.
-       - Usa 'reschedule_appointment' en cuanto tengas el ID y la nueva fecha.
-    
-    4. ACCIÓN OBLIGATORIA: Tienes PROHIBIDO decir "Estos son los horarios" o "He agendado" sin haber llamado a la función correspondiente en este turno. Si no aparece una llamada a función en tu respuesta, no puedes listar horarios.
-    
-    5. No inventes IDs de citas ni nombres de pacientes.
-    
-    6. La fecha debe estar en formato ISO (YYYY-MM-DDTHH:mm).
-    
-    7. PROHIBICIÓN DE CÓDIGO: Tu respuesta debe ser 100% lenguaje natural. SIEMPRE ejecuta las funciones, no las menciones.
-    
-    8. REGLA DE ENLACES: El enlace debe terminar con un espacio o un salto de línea.
-    
-    9. Sé concisa y natural. Ignora listas de horarios previas.
-    
+    REGLAS DE ORO:
+    1. CONCISIÓN EXTREMA: Responde en MÁXIMO 2 oraciones cortas. No des rodeos ni explicaciones largas.
+    2. UN SOLO MENSAJE: Toda tu respuesta debe ir en un único bloque de texto.
+    3. DISPONIBILIDAD: SIEMPRE llama a 'get_available_slots' si preguntan por horarios. 
+    4. ACCIÓN DIRECTA: Si tienes el nombre (${extractedName || 'desconocido'}) y el horario, agenda de inmediato.
+    5. No inventes datos. Si no sabes algo, pide al usuario contactar a la clínica.
+    6. PROHIBICIÓN DE CÓDIGO: Tu respuesta debe ser 100% lenguaje natural.
+
     ${extractedName
-        ? `\n[DATOS DEL PACIENTE] Nombre: ${extractedName}. YA TIENES EL NOMBRE. ÚSALO para agendar automáticamente.`
-        : `\n[DATOS DEL PACIENTE] Nombre: Desconocido. Pídelo antes de agendar.`}`;
+        ? `\n[PACIENTE] Nombre: ${extractedName}.`
+        : `\n[PACIENTE] Nombre: Desconocido. Pídelo antes de agendar.`}`;
 
     // Map history to Gemini format
     const chatHistory = history.reverse().map(m => ({
@@ -727,7 +725,6 @@ async function sendWhatsAppMessage(to, body, conversationId = null, message_type
     });
 
     const data = await response.json();
-    console.log(`YCloud API Response:`, JSON.stringify(data));
     console.log(`Message sent to ${formattedTo} via YCloud. ID: ${data.id}`);
   } catch (error) {
     console.error('Error sending WhatsApp message via YCloud:', error);
