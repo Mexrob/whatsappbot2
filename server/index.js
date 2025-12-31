@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const db = require('./db');
 
@@ -12,6 +14,26 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+}
+
+// Multer config
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage });
+
+app.use('/uploads', express.static(uploadsDir));
 
 // Serve static files from React build
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -170,9 +192,18 @@ app.get('/api/messages', (req, res) => {
     SELECT m.*, p.name as patient_name
     FROM messages m 
     LEFT JOIN patients p ON m.phone_number = p.phone_number
-    ORDER BY received_at DESC
+    ORDER BY m.received_at DESC
   `).all();
   res.json(messages);
+});
+
+// Upload endpoint
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No se subió ningún archivo.' });
+  }
+  const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+  res.json({ success: true, url: fileUrl });
 });
 
 app.post('/api/chats/update-name', (req, res) => {
@@ -237,27 +268,33 @@ app.post('/api/webhook/chatwoot', async (req, res) => {
 
 
 app.post('/api/messages', async (req, res) => {
-  console.log('DEBUG: Received message save request:', req.body);
-  let { phone_number, message_content, sender } = req.body;
-
-  // Normalize Mexican phone numbers (+521... -> +52...)
-  if (phone_number.startsWith('+521') && phone_number.length === 14) {
-    phone_number = '+52' + phone_number.substring(4);
-  }
+  const { phone_number, message_content, message_type, media_url } = req.body;
+  const timestamp = new Date().toISOString();
 
   try {
-    // Save message to database
-    db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
-      .run(phone_number, message_content, sender, new Date().toISOString());
+    // Save to database
+    db.prepare('INSERT INTO messages (phone_number, message_content, sender, message_type, media_url) VALUES (?, ?, ?, ?, ?)')
+      .run(phone_number, message_content || '', 'assistant', message_type || 'text', media_url || null);
 
-    // If sender is assistant (admin), send via WhatsApp
-    if (sender === 'assistant') {
-      await sendWhatsAppMessage(phone_number, message_content);
+    // Sync with Chatwoot if active
+    let conversationId = null;
+    if (process.env.ACTIVATE_CHATWOOT === 'true') {
+      const chatStatus = db.prepare('SELECT chatwoot_conversation_id FROM chat_status WHERE phone_number = ?').get(phone_number);
+      conversationId = chatStatus?.chatwoot_conversation_id;
+
+      // If no conversationId but Chatwoot is active, we should still try to sync
+      const syncResult = await syncWithChatwoot(phone_number, message_content || (media_url ? `Media: ${message_type}` : ''), 'assistant', message_type, media_url);
+      if (syncResult?.conversationId) {
+        conversationId = syncResult.conversationId;
+      }
     }
+
+    // Send via YCloud (WhatsApp)
+    await sendWhatsAppMessage(phone_number, message_content, conversationId, message_type, media_url);
 
     res.json({ success: true });
   } catch (error) {
-    console.error('DEBUG: Database Error during message save:', error);
+    console.error('Error sending dashboard message:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -272,9 +309,29 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     return res.status(200).send('OK'); // Acknowledge other event types (deliveries, etc.)
   }
 
-  const Body = inboundData.text?.body || '';
+  let Body = inboundData.text?.body || '';
   let phoneNumber = inboundData.from;
   const profileName = inboundData.customerProfile?.name;
+  let messageType = 'text';
+  let mediaUrl = null;
+
+  // Handle Media
+  if (inboundData.image) {
+    messageType = 'image';
+    mediaUrl = inboundData.image.link;
+    Body = inboundData.image.caption || '';
+  } else if (inboundData.audio) {
+    messageType = 'audio';
+    mediaUrl = inboundData.audio.link;
+  } else if (inboundData.video) {
+    messageType = 'video';
+    mediaUrl = inboundData.video.link;
+    Body = inboundData.video.caption || '';
+  } else if (inboundData.document) {
+    messageType = 'document';
+    mediaUrl = inboundData.document.link;
+    Body = inboundData.document.caption || inboundData.document.filename || '';
+  }
 
   if (!phoneNumber) return res.status(200).send('OK');
 
@@ -290,13 +347,13 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
         .run(phoneNumber, profileName);
     }
 
-    console.log('Webhook triggered (YCloud). From:', phoneNumber, 'Body:', Body, 'ProfileName:', profileName);
+    console.log('Webhook triggered (YCloud). From:', phoneNumber, 'Type:', messageType, 'Body:', Body);
     // 1. Save user message
-    db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
-      .run(phoneNumber, Body, 'user', new Date().toISOString());
+    db.prepare('INSERT INTO messages (phone_number, message_content, sender, message_type, media_url, received_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(phoneNumber, Body, 'user', messageType, mediaUrl, new Date().toISOString());
 
     // 2. Sync with Chatwoot if active
-    const conversationId = await syncWithChatwoot(phoneNumber, Body, profileName);
+    const conversationId = await syncWithChatwoot(phoneNumber, Body, 'user', messageType, mediaUrl);
 
     // Check if AI is paused for this number
     const chatStatus = db.prepare('SELECT is_ai_paused FROM chat_status WHERE phone_number = ?').get(phoneNumber);
@@ -411,7 +468,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
       }
     ];
 
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -491,7 +548,7 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
                 WHERE status != 'cancelled'
               )
               ORDER BY start_time ASC 
-              LIMIT 10
+              LIMIT 30
             `).all();
             if (slots.length === 0) {
               aiResponse = `Por el momento no tengo horarios disponibles en el sistema. Por favor, intenta contactar directamente a ${settings.clinic_name}.`;
@@ -599,7 +656,7 @@ app.use((req, res) => {
 });
 
 // Helper: Send WhatsApp Message (YCloud or Chatwoot)
-async function sendWhatsAppMessage(to, body, conversationId = null) {
+async function sendWhatsAppMessage(to, body, conversationId = null, message_type = 'text', media_url = null) {
   let formattedTo = to.replace('whatsapp:', '');
   if (formattedTo.startsWith('+521') && formattedTo.length === 14) {
     formattedTo = '+52' + formattedTo.substring(4);
@@ -615,7 +672,10 @@ async function sendWhatsAppMessage(to, body, conversationId = null) {
           'Content-Type': 'application/json',
           'api_access_token': process.env.CHATWOOT_ACCESS_TOKEN
         },
-        body: JSON.stringify({ content: body, message_type: 'outgoing' })
+        body: JSON.stringify({
+          content: media_url ? `${body || ''}\n[Media (${message_type})]: ${media_url}`.trim() : body,
+          message_type: 'outgoing'
+        })
       });
       console.log(`AI message synced to Chatwoot conversation ${conversationId}`);
     } catch (cwError) {
@@ -635,8 +695,10 @@ async function sendWhatsAppMessage(to, body, conversationId = null) {
       body: JSON.stringify({
         from: process.env.YCLOUD_FROM,
         to: formattedTo,
-        type: 'text',
-        text: { body: body },
+        type: message_type === 'text' ? 'text' : message_type,
+        [message_type === 'text' ? 'text' : message_type]: message_type === 'text'
+          ? { body: body }
+          : { link: media_url, caption: body || undefined },
         wabaId: process.env.YCLOUD_WABA_ID
       })
     });
@@ -650,7 +712,7 @@ async function sendWhatsAppMessage(to, body, conversationId = null) {
 
 
 // Helper: Sync with Chatwoot (Forward incoming message)
-async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
+async function syncWithChatwoot(phoneNumber, messageContent, senderRole = 'user', message_type = 'text', media_url = null) {
   if (process.env.ACTIVATE_CHATWOOT !== 'true') return null;
 
   try {
@@ -671,7 +733,7 @@ async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
       contactResponse = await fetch(`${cwUrl}/contacts`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ name: profileName || phoneNumber, phone_number: phoneNumber, inbox_id: inboxId })
+        body: JSON.stringify({ name: phoneNumber, phone_number: phoneNumber, inbox_id: inboxId })
       });
       contactData = await contactResponse.json();
       contact = contactData.payload?.contact;
@@ -707,11 +769,13 @@ async function syncWithChatwoot(phoneNumber, messageContent, profileName) {
 
     console.log(`[Chatwoot Debug] Conversation ID: ${conversation.id}. Posting message...`);
 
-    // 3. Post message to Chatwoot
     const msgRes = await fetch(`${cwUrl}/conversations/${conversation.id}/messages`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ content: messageContent, message_type: 'incoming' })
+      body: JSON.stringify({
+        content: media_url ? `${messageContent || ''}\n[Media (${message_type})]: ${media_url}`.trim() : messageContent,
+        message_type: senderRole === 'assistant' ? 'outgoing' : 'incoming'
+      })
     });
 
     if (!msgRes.ok) {
