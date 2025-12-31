@@ -1,10 +1,10 @@
-# Erika IA - Gestión de Clínica Estética
+# ROM IA - Gestión de reservaciones por whatsapp con inteligencia artificial 
 
-Erika IA es una plataforma de gestión para clínicas estéticas que incluye un dashboard administrativo y un bot de WhatsApp inteligente.
+ROM IA es una plataforma de gestión de reservaciones por whatsapp con inteligencia artificial que incluye un dashboard administrativo y un bot de WhatsApp inteligente.
 
 ## Características
 
-- 📊 **Dashboard Administrativo**: Gestiona citas, mensajes y configuración de la clínica.
+- 📊 **Dashboard Administrativo**: Gestiona citas, mensajes y configuración de la empresa.
 - 🤖 **Bot de WhatsApp**: Integración con Gemini AI para agendar citas automáticamente.
 - 📱 **Diseño Responsive**: Interfaz moderna y optimizada.
 
