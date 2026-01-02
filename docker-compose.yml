@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  erika-inst1:
+    build: .
+    container_name: erika-inst1
+    ports:
+      - "3001:3001"
+    env_file: .env
+    volumes:
+      - ./server/database.sqlite:/app/server/database.sqlite
+      - ./uploads:/app/uploads
+    restart: always
+
+  erika-inst2:
+    build: .
+    container_name: erika-inst2
+    ports:
+      - "3002:3001"
+    env_file: .env.inst2
+    volumes:
+      - ./inst2_data/database.sqlite:/app/server/database.sqlite
+      - ./inst2_uploads:/app/uploads
+    restart: always
+
+# Note: You can add as many instances as needed by duplicating a service block
+# and changing the ports, env_file, and volume paths.
