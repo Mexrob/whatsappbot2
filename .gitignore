@@ -28,3 +28,4 @@ dist/
 # Environment files
 *.env
 *.env.*
+google-credentials.json

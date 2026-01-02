@@ -6,6 +6,7 @@ const fs = require('fs');
 const multer = require('multer');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const db = require('./db');
+const calendarService = require('./calendarService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -163,32 +164,85 @@ app.get('/api/appointments', (req, res) => {
   res.json(appointments);
 });
 
-app.post('/api/appointments', (req, res) => {
+app.post('/api/appointments', async (req, res) => {
   const { phone_number, patient_name, appointment_date, appointment_type } = req.body;
-  db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
-    .run(phone_number, patient_name, appointment_date, appointment_type);
-  res.json({ success: true });
+  try {
+    const result = db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
+      .run(phone_number, patient_name, appointment_date, appointment_type);
+
+    const appointmentId = result.lastInsertRowid;
+    const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+    const start = new Date(appointment_date);
+    const end = new Date(start.getTime() + 30 * 60 * 1000);
+
+    const googleEvent = await calendarService.createCalendarEvent(calendarId, {
+      summary: `Cita: ${patient_name} (${appointment_type})`,
+      description: `Paciente: ${patient_name}\nTeléfono: ${phone_number}\nTipo: ${appointment_type}\nAgendado desde Dashboard`,
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+    }).catch(err => console.error('Error syncing manual appointment to Google:', err));
+
+    if (googleEvent) {
+      db.prepare('UPDATE appointments SET google_event_id = ? WHERE id = ?').run(googleEvent.id, appointmentId);
+    }
+
+    res.json({ success: true, id: appointmentId });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
-app.put('/api/appointments/:id', (req, res) => {
+app.put('/api/appointments/:id', async (req, res) => {
   const { id } = req.params;
   const { status, appointment_date } = req.body;
   console.log('Update appointment request. ID:', id, 'Body:', req.body);
 
-  if (status) {
-    db.prepare('UPDATE appointments SET status = ? WHERE id = ?').run(status, id);
-  } else if (appointment_date) {
-    db.prepare('UPDATE appointments SET appointment_date = ? WHERE id = ?').run(appointment_date, id);
-  }
+  try {
+    const appointment = db.prepare('SELECT * FROM appointments WHERE id = ?').get(id);
+    if (!appointment) return res.status(404).json({ success: false, message: 'Cita no encontrada' });
 
-  res.json({ success: true });
+    if (status) {
+      db.prepare('UPDATE appointments SET status = ? WHERE id = ?').run(status, id);
+
+      if (status === 'cancelled' && appointment.google_event_id) {
+        const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+        await calendarService.deleteCalendarEvent(calendarId, appointment.google_event_id).catch(err => console.error('Error deleting Google event:', err));
+      }
+    } else if (appointment_date) {
+      db.prepare('UPDATE appointments SET appointment_date = ? WHERE id = ?').run(appointment_date, id);
+
+      if (appointment.google_event_id) {
+        const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+        const start = new Date(appointment_date);
+        const end = new Date(start.getTime() + 30 * 60 * 1000);
+        await calendarService.updateCalendarEvent(calendarId, appointment.google_event_id, {
+          summary: `Cita: ${appointment.patient_name} (${appointment.appointment_type})`,
+          start: { dateTime: start.toISOString() },
+          end: { dateTime: end.toISOString() },
+        }).catch(err => console.error('Error updating Google event:', err));
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
-app.delete('/api/appointments/:id', (req, res) => {
+app.delete('/api/appointments/:id', async (req, res) => {
   const { id } = req.params;
   console.log('Delete appointment request. ID:', id);
-  db.prepare('DELETE FROM appointments WHERE id = ?').run(id);
-  res.json({ success: true });
+  try {
+    const appointment = db.prepare('SELECT google_event_id FROM appointments WHERE id = ?').get(id);
+    if (appointment && appointment.google_event_id) {
+      const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+      await calendarService.deleteCalendarEvent(calendarId, appointment.google_event_id).catch(err => console.error('Error deleting Google event:', err));
+    }
+    db.prepare('DELETE FROM appointments WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Messages
@@ -545,17 +599,48 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             } else if (alreadyBooked) {
               aiResponse = "Lo siento, ese horario ya ha sido reservado por otra persona justo ahora. ¿Podemos intentar con otro?";
             } else {
-              db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
-                .run(phoneNumber, patient_name, appointment_date, appointment_type);
+              // Check Google Calendar Busy status
+              const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+              const start = new Date(appointment_date + '-06:00');
+              const end = new Date(start.getTime() + 30 * 60 * 1000); // Assume 30 min duration
 
-              const apptDate = new Date(appointment_date + '-06:00');
-              const formattedDate = apptDate.toLocaleString('es-MX', {
-                timeZone: 'America/Mexico_City',
-                dateStyle: 'long',
-                timeStyle: 'short'
+              const isBusy = await calendarService.isSlotBusy(calendarId, start, end).catch(err => {
+                console.error('Error checking Google Calendar busy status:', err);
+                return false;
               });
 
-              aiResponse = `¡Perfecto! He agendado tu cita de ${appointment_type} para el ${formattedDate}. ¿Te puedo ayudar en algo más?`;
+              if (isBusy) {
+                aiResponse = "Lo siento, aunque el horario parece disponible en el sistema local, está ocupado en mi agenda principal. ¿Podemos buscar otro?";
+              } else {
+                const result = db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
+                  .run(phoneNumber, patient_name, appointment_date, appointment_type);
+
+                // Sync with Google Calendar
+                calendarService.createCalendarEvent(calendarId, {
+                  summary: `Cita: ${patient_name} (${appointment_type})`,
+                  description: `Paciente: ${patient_name}\nTeléfono: ${phoneNumber}\nTipo: ${appointment_type}\nAgendado por Erika AI`,
+                  start: { dateTime: start.toISOString() },
+                  end: { dateTime: end.toISOString() },
+                  extendedProperties: {
+                    private: {
+                      local_appointment_id: result.lastInsertRowid.toString(),
+                      phone_number: phoneNumber
+                    }
+                  }
+                }).then(googleEvent => {
+                  if (googleEvent) {
+                    db.prepare('UPDATE appointments SET google_event_id = ? WHERE id = ?').run(googleEvent.id, result.lastInsertRowid);
+                  }
+                }).catch(err => console.error('Error syncing to Google Calendar:', err));
+
+                const formattedDate = start.toLocaleString('es-MX', {
+                  timeZone: 'America/Mexico_City',
+                  dateStyle: 'long',
+                  timeStyle: 'short'
+                });
+
+                aiResponse = `¡Perfecto! He agendado tu cita de ${appointment_type} para el ${formattedDate}. ¿Te puedo ayudar en algo más?`;
+              }
             }
           }
           else if (name === 'get_available_slots') {
@@ -574,10 +659,28 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
             if (slots.length === 0) {
               aiResponse = `Por el momento no tengo horarios disponibles en el sistema. Por favor, intenta contactar directamente a ${settings.clinic_name}.`;
             } else {
-              const list = slots.map(s => {
-                return `- ${new Date(s.start_time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'short', hour: 'numeric', minute: 'numeric', timeZone: 'America/Mexico_City' })}`;
-              }).join('\n');
-              aiResponse = `Estos son los horarios que tengo libres próximamente:\n${list}\n¿Te queda bien alguno?`;
+              // Filter slots by Google Calendar busy status
+              const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+              const filteredSlots = [];
+
+              for (const slot of slots) {
+                const start = new Date(slot.start_time);
+                const end = new Date(start.getTime() + 30 * 60 * 1000); // Assume 30 min duration
+                const isBusy = await calendarService.isSlotBusy(calendarId, start, end).catch(() => false);
+                if (!isBusy) {
+                  filteredSlots.push(slot);
+                }
+                if (filteredSlots.length >= 10) break; // Don't overwhelm with too many slots
+              }
+
+              if (filteredSlots.length === 0) {
+                aiResponse = `Por el momento no tengo horarios libres. Por favor, intenta mañana o contacta directamente a ${settings.clinic_name}.`;
+              } else {
+                const list = filteredSlots.map(s => {
+                  return `- ${new Date(s.start_time).toLocaleString('es-MX', { weekday: 'long', day: 'numeric', month: 'short', hour: 'numeric', minute: 'numeric', timeZone: 'America/Mexico_City' })}`;
+                }).join('\n');
+                aiResponse = `Estos son los horarios que tengo libres próximamente:\n${list}\n¿Te queda bien alguno?`;
+              }
             }
           }
           else if (name === 'get_my_appointments') {
@@ -613,63 +716,80 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
 
             if (!openInAgenda) {
               aiResponse = "Lo siento, ese horario no está disponible en nuestra agenda. ¿Te gustaría ver otras opciones?";
-            } else if (alreadyBooked) {
-              aiResponse = "Lo siento, ese nuevo horario ya está ocupado. ¿Te gustaría intentar con otro?";
             } else {
-              const result = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ? AND phone_number = ?")
-                .run(new_date, appointment_id, phoneNumber);
+              const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+              const start = new Date(new_date + '-06:00');
+              const end = new Date(start.getTime() + 30 * 60 * 1000);
 
-              console.log(`DEBUG: Update Result:`, result);
+              const isBusy = await calendarService.isSlotBusy(calendarId, start, end).catch(() => false);
 
-              if (result.changes > 0) {
-                const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
-                  timeZone: 'America/Mexico_City',
-                  dateStyle: 'long',
-                  timeStyle: 'short'
-                });
-                aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
+              if (alreadyBooked || isBusy) {
+                aiResponse = "Lo siento, ese nuevo horario ya está ocupado. ¿Te gustaría intentar con otro?";
               } else {
-                // Fallback: intentar actualizar solo por ID si falla con phone_number
-                const retry = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ?")
-                  .run(new_date, appointment_id);
+                const appointment = db.prepare('SELECT * FROM appointments WHERE id = ?').get(appointment_id);
+                const result = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ? AND phone_number = ?")
+                  .run(new_date, appointment_id, phoneNumber);
 
-                if (retry.changes > 0) {
-                  const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
+                console.log(`DEBUG: Update Result:`, result);
+
+                if (result.changes > 0) {
+                  // Sync with Google Calendar
+                  if (appointment && appointment.google_event_id) {
+                    calendarService.updateCalendarEvent(calendarId, appointment.google_event_id, {
+                      summary: `Cita: ${appointment.patient_name} (${appointment.appointment_type})`,
+                      start: { dateTime: start.toISOString() },
+                      end: { dateTime: end.toISOString() },
+                    }).catch(err => console.error('Error updating Google event via AI:', err));
+                  }
+
+                  const formattedDate = start.toLocaleString('es-MX', {
                     timeZone: 'America/Mexico_City',
                     dateStyle: 'long',
                     timeStyle: 'short'
                   });
                   aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
                 } else {
-                  aiResponse = "No pude encontrar esa cita para reprogramarla. Por favor, confírmame el horario actual.";
+                  // Fallback: intentar actualizar solo por ID si falla con phone_number
+                  const retry = db.prepare("UPDATE appointments SET appointment_date = ?, status = 'confirmed' WHERE id = ?")
+                    .run(new_date, appointment_id);
+
+                  if (retry.changes > 0) {
+                    const formattedDate = new Date(new_date + '-06:00').toLocaleString('es-MX', {
+                      timeZone: 'America/Mexico_City',
+                      dateStyle: 'long',
+                      timeStyle: 'short'
+                    });
+                    aiResponse = `¡Listo! He reprogramado tu cita para el ${formattedDate}.`;
+                  } else {
+                    aiResponse = "No pude encontrar esa cita para reprogramarla. Por favor, confírmame el horario actual.";
+                  }
                 }
               }
             }
+          } catch (dbError) {
+            console.error('Database Error during AI tool call:', dbError);
+            aiResponse = "Tuve un problema al acceder a mi agenda. ¿Podrías intentar de nuevo en un momento?";
           }
-        } catch (dbError) {
-          console.error('Database Error during AI tool call:', dbError);
-          aiResponse = "Tuve un problema al acceder a mi agenda. ¿Podrías intentar de nuevo en un momento?";
+        } else {
+          aiResponse = candidate?.content?.parts?.[0]?.text || aiResponse;
         }
-      } else {
-        aiResponse = candidate?.content?.parts?.[0]?.text || aiResponse;
       }
+
+      console.log('Final AI Response:', aiResponse);
+
+      // 4. Save AI message
+      db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
+        .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
+
+      // 5. Send via Twilio
+      await sendWhatsAppMessage(phoneNumber, aiResponse, conversationId);
+
+      res.status(200).send('OK');
+    } catch (error) {
+      console.error('Webhook Error:', error);
+      res.status(500).json({ error: error.message });
     }
-
-    console.log('Final AI Response:', aiResponse);
-
-    // 4. Save AI message
-    db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
-      .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
-
-    // 5. Send via Twilio
-    await sendWhatsAppMessage(phoneNumber, aiResponse, conversationId);
-
-    res.status(200).send('OK');
-  } catch (error) {
-    console.error('Webhook Error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+  });
 
 // Catch-all route to serve React index.html
 app.use((req, res) => {

@@ -103,4 +103,11 @@ try {
   // Columns likely already exist
 }
 
+// Migration: Add google_event_id to appointments if not exists
+try {
+  db.prepare("ALTER TABLE appointments ADD COLUMN google_event_id TEXT").run();
+} catch (error) {
+  // Column likely already exists
+}
+
 module.exports = db;
