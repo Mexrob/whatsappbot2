@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  erika-bot:
+    build: .
+    restart: always
+    environment:
+      # Application Config
+      - PORT=3001
+      - NODE_ENV=production
+
+      # Database Persistence (Internal Path)
+      - DB_PATH=/app/data/database.sqlite
+
+      # Secrets (To be filled in Coolify UI)
+      - GOOGLE_CALENDAR_ID
+      - GOOGLE_JSON_CREDENTIALS
+      - GEMINI_API_KEY
+      - WHATSAPP_PHONE_NUMBER_ID
+      - WHATSAPP_TOKEN
+      - VERIFY_TOKEN
+
+    volumes:
+      - erika_data:/app/data
+      - erika_uploads:/app/uploads
+
+    ports:
+      - "3001:3001"
+
+volumes:
+  erika_data:
+  erika_uploads:

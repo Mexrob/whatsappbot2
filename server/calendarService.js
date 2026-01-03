@@ -10,15 +10,24 @@ let calendar = null;
 function initializeCalendar() {
     if (calendar) return calendar;
 
-    if (!fs.existsSync(CREDENTIALS_PATH)) {
+    let authOptions = { scopes: SCOPES };
+    const envCreds = process.env.GOOGLE_JSON_CREDENTIALS;
+
+    if (envCreds) {
+        try {
+            authOptions.credentials = JSON.parse(envCreds);
+        } catch (e) {
+            console.error('Failed to parse GOOGLE_JSON_CREDENTIALS', e);
+            return null;
+        }
+    } else if (fs.existsSync(CREDENTIALS_PATH)) {
+        authOptions.keyFile = CREDENTIALS_PATH;
+    } else {
         console.warn('Google Calendar credentials not found at', CREDENTIALS_PATH);
         return null;
     }
 
-    const auth = new google.auth.GoogleAuth({
-        keyFile: CREDENTIALS_PATH,
-        scopes: SCOPES,
-    });
+    const auth = new google.auth.GoogleAuth(authOptions);
 
     calendar = google.calendar({ version: 'v3', auth });
     return calendar;
