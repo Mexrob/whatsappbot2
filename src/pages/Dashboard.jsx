@@ -229,7 +229,7 @@ const Dashboard = ({ onLogout }) => {
 
             <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
             <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl mx-2">
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 29/12-12:00 Features++</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 02/01-16:40 GCal VISUALS</p>
               <div className="flex items-center gap-1.5 mb-2">
                 <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
                 <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">Auto-Sync: Activado</p>
@@ -988,6 +988,7 @@ function CalendarTab() {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [availability, setAvailability] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [googleEvents, setGoogleEvents] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8 AM to 8 PM
@@ -1006,12 +1007,22 @@ function CalendarTab() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [slots, appts] = await Promise.all([
+      // Calculate start/end for the week window
+      const startOfWeek = new Date(currentWeek);
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+      const [slots, appts, gEvents] = await Promise.all([
         api.getAvailability(),
-        api.getAppointments()
+        api.getAppointments(),
+        api.getGoogleEvents(startOfWeek.toISOString(), endOfWeek.toISOString())
       ]);
       setAvailability(slots);
       setAppointments(appts.data);
+      setGoogleEvents(gEvents.data || []);
     } catch (error) {
       console.error('Error loading calendar:', error);
     } finally {
@@ -1107,6 +1118,16 @@ function CalendarTab() {
                   return aTime >= cellTime.getTime() && aTime < cellTime.getTime() + 3600000 && a.status !== 'cancelled';
                 });
 
+
+                // Check for Google Event overlap
+                const googleEvent = googleEvents?.find(ge => {
+                  const gStart = new Date(ge.start).getTime();
+                  const gEnd = new Date(ge.end).getTime();
+                  const cellStart = cellTime.getTime();
+                  const cellEnd = cellStart + 3600000;
+                  return (gStart < cellEnd && gEnd > cellStart);
+                });
+
                 return (
                   <div
                     key={d.toISOString() + hour}
@@ -1118,30 +1139,42 @@ function CalendarTab() {
                         : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}
                     `}
                   >
-                    {isAvailable && !appointment && (
+                    {isAvailable && !appointment && !googleEvent && (
                       <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-green-500" />
                     )}
 
-                    {!isAvailable && (
+                    {!isAvailable && !googleEvent && !appointment && (
                       <div className="hidden group-hover:flex items-center justify-center h-full text-slate-300 dark:text-slate-600">
                         <Plus size={16} />
                       </div>
                     )}
 
+                    {googleEvent && !appointment && (
+                      <div className="absolute inset-1 bg-slate-100 dark:bg-slate-700 rounded-lg p-2 text-[10px] overflow-hidden border border-slate-200 dark:border-slate-600 z-10" title={`En Google Calendar: ${googleEvent.title}`}>
+                        <div className="flex items-center gap-1 mb-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-slate-400"></div>
+                          <span className="font-bold text-slate-500 dark:text-slate-300 truncate">GCal</span>
+                        </div>
+                        <span className="text-slate-500 dark:text-slate-400 block truncate font-medium">{googleEvent.title}</span>
+                      </div>
+                    )}
+
                     {appointment && (
-                      <div className="absolute inset-1 bg-teal-100 dark:bg-teal-900/80 rounded-lg p-2 text-[10px] overflow-hidden border border-teal-200 dark:border-teal-700 shadow-sm z-10">
+                      <div className="absolute inset-1 bg-teal-100 dark:bg-teal-900/80 rounded-lg p-2 text-[10px] overflow-hidden border border-teal-200 dark:border-teal-700 shadow-sm z-20">
                         <span className="font-bold text-teal-700 dark:text-teal-200 block truncate">{appointment.patient_name}</span>
                         <span className="text-teal-600 dark:text-teal-300 block truncate">{appointment.appointment_type}</span>
                       </div>
                     )}
                   </div>
                 );
+
+
               })}
             </React.Fragment>
           ))}
         </div>
       </div>
-    </div>
+    </div >
   );
 }
 
@@ -1158,6 +1191,21 @@ const SettingsTab = ({ settings, onUpdate }) => {
   });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [calendarStatus, setCalendarStatus] = useState(null);
+
+  useEffect(() => {
+    checkCalendarStatus();
+  }, []);
+
+  const checkCalendarStatus = async () => {
+    try {
+      const res = await api.getGoogleCalendarStatus();
+      setCalendarStatus(res.data);
+    } catch (error) {
+      console.error('Error checking calendar status:', error);
+      setCalendarStatus({ connected: false, message: 'Error de conexión' });
+    }
+  };
 
   useEffect(() => {
     if (settings) {
@@ -1279,6 +1327,40 @@ const SettingsTab = ({ settings, onUpdate }) => {
               </div>
             </div>
           </div>
+        </section>
+
+        <section className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-6 flex items-center gap-2">
+            <Calendar size={20} className="text-teal-500" /> Integraciones
+          </h3>
+          <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center shadow-sm">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="GCal" className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-800 dark:text-white">Google Calendar</h4>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${calendarStatus?.connected ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {calendarStatus ? (calendarStatus.connected ? 'Conectado y Sincronizando' : 'Desconectado / Error') : 'Verificando...'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={checkCalendarStatus}
+              className="px-4 py-2 text-sm font-bold text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors"
+            >
+              Verificar
+            </button>
+          </div>
+          {calendarStatus?.message && (
+            <p className={`mt-2 text-xs ${calendarStatus.connected ? 'text-green-600' : 'text-red-500'}`}>
+              {calendarStatus.message}
+            </p>
+          )}
         </section>
 
         <section className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">

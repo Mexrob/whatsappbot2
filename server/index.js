@@ -132,10 +132,64 @@ app.put('/api/settings', (req, res) => {
   }
 });
 
+app.get('/api/settings/status/google-calendar', async (req, res) => {
+  try {
+    const credsPath = path.join(__dirname, 'google-credentials.json');
+    if (!fs.existsSync(credsPath)) {
+      return res.json({ connected: false, message: 'Archivo de credenciales no encontrado (google-credentials.json)' });
+    }
+
+    const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+    const start = new Date();
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
+    try {
+      await calendarService.listEvents(calendarId, start, end);
+      res.json({ connected: true, calendarId, message: 'Conectado correctamente' });
+    } catch (apiError) {
+      console.error('Google Calendar API Error:', apiError);
+      res.json({ connected: false, message: 'Error de autenticación con Google: ' + apiError.message, calendarId });
+    }
+  } catch (error) {
+    res.status(500).json({ connected: false, error: error.message });
+  }
+});
+
 // Availability
 app.get('/api/availability', (req, res) => {
   const slots = db.prepare('SELECT * FROM availability ORDER BY start_time ASC').all();
   res.json(slots);
+});
+
+app.get('/api/calendar/events', async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    // Default to current week if not provided
+    const startDate = start ? new Date(start) : new Date();
+    const endDate = end ? new Date(end) : new Date(new Date().setDate(new Date().getDate() + 7));
+
+    const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary';
+    console.log(`DEBUG: Fetching GCal events for ID: ${calendarId} from ${startDate} to ${endDate}`);
+
+    const events = await calendarService.listEvents(calendarId, startDate, endDate);
+    console.log(`DEBUG: Found ${events.length} events from Google.`);
+    events.forEach(e => console.log(` - Event: ${e.summary} (${e.start.dateTime} - ${e.end.dateTime})`));
+
+    const normalizedEvents = events.map(e => ({
+      id: e.id,
+      title: e.summary || 'Ocupado',
+      start: e.start.dateTime || e.start.date, // Handle all-day events (date only)
+      end: e.end.dateTime || e.end.date,
+      source: 'google',
+      allDay: !e.start.dateTime
+    }));
+
+    res.json(normalizedEvents);
+  } catch (error) {
+    console.error('Error fetching Google events:', error);
+    // Return empty array to avoid breaking frontend on error
+    res.json([]);
+  }
 });
 
 app.post('/api/availability', (req, res) => {
@@ -766,30 +820,31 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
                 }
               }
             }
-          } catch (dbError) {
-            console.error('Database Error during AI tool call:', dbError);
-            aiResponse = "Tuve un problema al acceder a mi agenda. ¿Podrías intentar de nuevo en un momento?";
           }
-        } else {
-          aiResponse = candidate?.content?.parts?.[0]?.text || aiResponse;
+        } catch (dbError) {
+          console.error('Database Error during AI tool call:', dbError);
+          aiResponse = "Tuve un problema al acceder a mi agenda. ¿Podrías intentar de nuevo en un momento?";
         }
+      } else {
+        aiResponse = candidate?.content?.parts?.[0]?.text || aiResponse;
       }
-
-      console.log('Final AI Response:', aiResponse);
-
-      // 4. Save AI message
-      db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
-        .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
-
-      // 5. Send via Twilio
-      await sendWhatsAppMessage(phoneNumber, aiResponse, conversationId);
-
-      res.status(200).send('OK');
-    } catch (error) {
-      console.error('Webhook Error:', error);
-      res.status(500).json({ error: error.message });
     }
-  });
+
+    console.log('Final AI Response:', aiResponse);
+
+    // 4. Save AI message
+    db.prepare('INSERT INTO messages (phone_number, message_content, sender, received_at) VALUES (?, ?, ?, ?)')
+      .run(phoneNumber, aiResponse, 'assistant', new Date().toISOString());
+
+    // 5. Send via Twilio
+    await sendWhatsAppMessage(phoneNumber, aiResponse, conversationId);
+
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Webhook Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Catch-all route to serve React index.html
 app.use((req, res) => {

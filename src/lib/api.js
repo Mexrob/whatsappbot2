@@ -6,6 +6,8 @@ export const api = {
   login: (credentials) => axios.post(`${API_URL}/login`, credentials),
   getSettings: () => axios.get(`${API_URL}/settings`),
   updateSettings: (settings) => axios.put(`${API_URL}/settings`, settings),
+  getGoogleCalendarStatus: () => axios.get(`${API_URL}/settings/status/google-calendar`),
+  getGoogleEvents: (start, end) => axios.get(`${API_URL}/calendar/events`, { params: { start, end } }),
   getAppointments: () => axios.get(`${API_URL}/appointments?_t=${Date.now()}`),
   createAppointment: (appt) => axios.post(`${API_URL}/appointments`, appt),
   updateAppointment: (id, data) => axios.put(`${API_URL}/appointments/${id}`, data),
