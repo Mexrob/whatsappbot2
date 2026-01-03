@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  erika-bot:
+  rom-ai-bot:
     build: .
     restart: always
     environment:
@@ -21,12 +21,12 @@ services:
       - VERIFY_TOKEN
 
     volumes:
-      - erika_data:/app/data
-      - erika_uploads:/app/uploads
+      - rom_ai_data:/app/data
+      - rom_ai_uploads:/app/uploads
 
     ports:
       - "3001:3001"
 
 volumes:
-  erika_data:
-  erika_uploads:
+  rom_ai_data:
+  rom_ai_uploads:
