@@ -64,8 +64,8 @@ db.exec(`
   );
 
   -- Seed initial data
-  INSERT OR IGNORE INTO clinic_settings (id, clinic_name, services) 
-  VALUES (1, 'Rom AI Bot', 'Limpieza Facial, Botox, Rellenos, Peeling');
+  INSERT OR IGNORE INTO clinic_settings (id, clinic_name, services, clinic_logo) 
+  VALUES (1, 'Wai Chatbot', 'Limpieza Facial, Botox, Rellenos, Peeling', '/wai-logo.jpg');
 
   INSERT OR IGNORE INTO users (email, password)
   VALUES ('admin@clinica.com', 'admin123');

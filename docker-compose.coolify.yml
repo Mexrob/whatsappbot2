@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  rom-ai-bot:
+  wai-bot:
     build: .
     restart: always
     environment:
@@ -21,12 +21,12 @@ services:
       - VERIFY_TOKEN
 
     volumes:
-      - rom_ai_data:/app/data
-      - rom_ai_uploads:/app/uploads
+      - wai_data:/app/data
+      - wai_uploads:/app/uploads
 
     ports:
       - "3001:3001"
 
 volumes:
-  rom_ai_data:
-  rom_ai_uploads:
+  wai_data:
+  wai_uploads:
