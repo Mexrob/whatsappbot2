@@ -44,47 +44,122 @@ app.use('/uploads', express.static(uploadsDir));
 // Serve static files from React build
 app.use(express.static(path.join(__dirname, '../dist')));
 
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-this';
+
+// Auth Middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, JWT_SECRET, (err, userDecoded) => {
+    if (err) return res.sendStatus(403);
+
+    // Fetch fresh user data from DB to ensure roles/permissions are up-to-date
+    const freshUser = db.prepare('SELECT id, email, role, permissions FROM users WHERE id = ?').get(userDecoded.id);
+
+    if (!freshUser) return res.sendStatus(403); // User no longer exists
+
+    // Parse permissions if needed (though prepare returns object if we handle it? No, standard sqlite3 returns string for text)
+    // Wait, in previous gets we manually parsed.
+    try {
+      freshUser.permissions = JSON.parse(freshUser.permissions || '{}');
+    } catch (e) {
+      freshUser.permissions = {};
+    }
+
+    req.user = freshUser;
+    next();
+  });
+};
+
 // Auth Routes
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email = ? AND password = ?').get(email, password);
   if (user) {
-    res.json({ success: true, user: { email: user.email, role: user.role, permissions: JSON.parse(user.permissions || '{}') } });
+    const userData = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      permissions: JSON.parse(user.permissions || '{}')
+    };
+    const token = jwt.sign(userData, JWT_SECRET, { expiresIn: '8h' });
+    res.json({ success: true, user: userData, token });
   } else {
     res.status(401).json({ success: false, message: 'Credenciales inválidas' });
   }
 });
 
-// User Management
-app.get('/api/users', (req, res) => {
-  const users = db.prepare('SELECT id, email, role, permissions FROM users').all();
+// User Management with RBAC
+app.get('/api/users', authenticateToken, (req, res) => {
+  let query = 'SELECT id, email, name, phone, google_calendar_id, role, permissions FROM users';
+  let params = [];
+
+  // If NOT admin, only show own profile
+  if (req.user.role !== 'admin') {
+    query += ' WHERE id = ?';
+    params.push(req.user.id);
+  }
+
+  const users = db.prepare(query).all(...params);
   users.forEach(u => {
     u.permissions = JSON.parse(u.permissions || '{}');
   });
   res.json(users);
 });
 
-app.post('/api/users', (req, res) => {
-  const { email, password, role, permissions } = req.body;
+app.post('/api/users', authenticateToken, (req, res) => {
+  // Only admin can create users
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acceso denegado' });
+
+  const { email, password, role, permissions, name, phone, google_calendar_id } = req.body;
   try {
-    db.prepare('INSERT INTO users (email, password, role, permissions) VALUES (?, ?, ?, ?)').run(email, password, role || 'staff', JSON.stringify(permissions || {}));
+    db.prepare('INSERT INTO users (email, password, role, permissions, name, phone, google_calendar_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(email, password, role || 'staff', JSON.stringify(permissions || {}), name, phone, google_calendar_id);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-app.put('/api/users/:id', (req, res) => {
+app.put('/api/users/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
-  const { email, password, role, permissions } = req.body;
+  const { email, password, role, permissions, name, phone, google_calendar_id } = req.body;
+
+  // RBAC Check: Admin can edit anyone. Staff can ONLY edit themselves.
+  if (req.user.role !== 'admin' && req.user.id !== parseInt(id)) {
+    return res.status(403).json({ error: 'Solo puedes editar tu propio perfil' });
+  }
+
+  // Prevent staff from elevating their own privileges (changing role or permissions)
+  if (req.user.role !== 'admin') {
+    if (role && role !== req.user.role) return res.status(403).json({ error: 'No puedes cambiar tu rol' });
+    // Note: We ignore permissions update from staff for safety, or we could strict check it
+  }
 
   try {
+    // If staff, force keep existing role/permissions if tried to change? 
+    // For simplicity, we trust the frontend sends correct data or we just use what's safe.
+    // Better security: If not admin, ignore role/permissions from body.
+    let updateRole = role;
+    let updatePerms = permissions;
+
+    if (req.user.role !== 'admin') {
+      const currentUser = db.prepare('SELECT role, permissions FROM users WHERE id = ?').get(id);
+      updateRole = currentUser.role;
+      updatePerms = JSON.parse(currentUser.permissions || '{}');
+    }
+
     if (password) {
-      db.prepare('UPDATE users SET email = ?, password = ?, role = ?, permissions = ? WHERE id = ?')
-        .run(email, password, role, JSON.stringify(permissions), id);
+      db.prepare('UPDATE users SET email = ?, password = ?, role = ?, permissions = ?, name = ?, phone = ?, google_calendar_id = ? WHERE id = ?')
+        .run(email, password, updateRole, JSON.stringify(updatePerms), name, phone, google_calendar_id, id);
     } else {
-      db.prepare('UPDATE users SET email = ?, role = ?, permissions = ? WHERE id = ?')
-        .run(email, role, JSON.stringify(permissions), id);
+      db.prepare('UPDATE users SET email = ?, role = ?, permissions = ?, name = ?, phone = ?, google_calendar_id = ? WHERE id = ?')
+        .run(email, updateRole, JSON.stringify(updatePerms), name, phone, google_calendar_id, id);
     }
     res.json({ success: true });
   } catch (error) {
@@ -92,7 +167,10 @@ app.put('/api/users/:id', (req, res) => {
   }
 });
 
-app.delete('/api/users/:id', (req, res) => {
+app.delete('/api/users/:id', authenticateToken, (req, res) => {
+  // Only admin can delete users
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acceso denegado' });
+
   const { id } = req.params;
   // Prevent deleting the last user or specific admin if restriction needed
   // For now simple delete
@@ -329,6 +407,510 @@ app.post('/api/chats/update-name', (req, res) => {
   res.json({ success: true });
 });
 
+// Customers CRUD
+app.get('/api/customers', (req, res) => {
+  try {
+    const { category, status, assigned_to } = req.query;
+    let query = 'SELECT * FROM customers WHERE 1=1';
+    const params = [];
+
+    if (category) {
+      query += ' AND category = ?';
+      params.push(category);
+    }
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+    if (assigned_to) {
+      query += ' AND assigned_to = ?';
+      params.push(assigned_to);
+    }
+
+    query += ' ORDER BY last_interaction DESC';
+    const customers = db.prepare(query).all(...params);
+    res.json(customers);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Customer stats
+app.get('/api/customers/stats', (req, res) => {
+  try {
+    const stats = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN category = 'prospect' THEN 1 ELSE 0 END) as prospects,
+        SUM(CASE WHEN category = 'client' THEN 1 ELSE 0 END) as clients,
+        SUM(CASE WHEN category = 'contact' THEN 1 ELSE 0 END) as contacts
+      FROM customers
+    `).get();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/customers/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(id);
+    if (customer) {
+      res.json(customer);
+    } else {
+      res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/customers', (req, res) => {
+  const { name, phone, email, notes } = req.body;
+  try {
+    const result = db.prepare('INSERT INTO customers (name, phone, email, notes, last_interaction) VALUES (?, ?, ?, ?, ?)')
+      .run(name, phone, email, notes, new Date().toISOString());
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/customers/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, phone, email, notes, category, status, company, position, source, assigned_to, tags } = req.body;
+  try {
+    db.prepare(`
+      UPDATE customers
+      SET name = ?, phone = ?, email = ?, notes = ?,
+          category = COALESCE(?, category),
+          status = COALESCE(?, status),
+          company = ?, position = ?, source = ?,
+          assigned_to = ?, tags = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(name, phone, email, notes, category, status, company, position, source, assigned_to, tags, id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/customers/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM customers WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===== CUSTOMER NOTES ENDPOINTS =====
+app.get('/api/customers/:customerId/notes', (req, res) => {
+  const { customerId } = req.params;
+  try {
+    const notes = db.prepare(`
+      SELECT n.*, u.email as author_email
+      FROM customer_notes n
+      LEFT JOIN users u ON n.created_by = u.id
+      WHERE n.customer_id = ?
+      ORDER BY n.is_pinned DESC, n.created_at DESC
+    `).all(customerId);
+    res.json(notes);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/customers/:customerId/notes', (req, res) => {
+  const { customerId } = req.params;
+  const { note_text, note_type, is_pinned, created_by } = req.body;
+  try {
+    const result = db.prepare(`
+      INSERT INTO customer_notes (customer_id, note_text, note_type, is_pinned, created_by)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(customerId, note_text, note_type || 'general', is_pinned || 0, created_by || 1);
+
+    const note = db.prepare('SELECT * FROM customer_notes WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json({ success: true, note });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/customers/:customerId/notes/:noteId', (req, res) => {
+  const { noteId } = req.params;
+  const { note_text, note_type, is_pinned } = req.body;
+  try {
+    db.prepare(`
+      UPDATE customer_notes
+      SET note_text = COALESCE(?, note_text),
+          note_type = COALESCE(?, note_type),
+          is_pinned = COALESCE(?, is_pinned),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(note_text, note_type, is_pinned, noteId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/customers/:customerId/notes/:noteId', (req, res) => {
+  const { noteId } = req.params;
+  try {
+    db.prepare('DELETE FROM customer_notes WHERE id = ?').run(noteId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/customers/:customerId/notes/:noteId/pin', (req, res) => {
+  const { noteId } = req.params;
+  try {
+    const note = db.prepare('SELECT is_pinned FROM customer_notes WHERE id = ?').get(noteId);
+    const newPinStatus = note.is_pinned === 1 ? 0 : 1;
+    db.prepare('UPDATE customer_notes SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(newPinStatus, noteId);
+    res.json({ success: true, is_pinned: newPinStatus });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===== CUSTOMER ATTACHMENTS ENDPOINTS =====
+app.get('/api/customers/:customerId/attachments', (req, res) => {
+  const { customerId } = req.params;
+  try {
+    const attachments = db.prepare(`
+      SELECT a.*, u.email as uploader_email
+      FROM customer_attachments a
+      LEFT JOIN users u ON a.uploaded_by = u.id
+      WHERE a.customer_id = ?
+      ORDER BY a.uploaded_at DESC
+    `).all(customerId);
+    res.json(attachments);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/customers/:customerId/attachments', upload.single('file'), (req, res) => {
+  const { customerId } = req.params;
+  const { description } = req.body;
+
+  if (!req.file) {
+    return res.status(400).json({ success: false, message: 'No file uploaded' });
+  }
+
+  try {
+    // Create customer-specific directory
+    const customerDir = path.join(uploadsDir, 'customers', customerId);
+    if (!fs.existsSync(customerDir)) {
+      fs.mkdirSync(customerDir, { recursive: true });
+    }
+
+    // Move file to customer directory
+    const oldPath = req.file.path;
+    const newPath = path.join(customerDir, req.file.filename);
+    fs.renameSync(oldPath, newPath);
+
+    const result = db.prepare(`
+      INSERT INTO customer_attachments
+      (customer_id, file_name, file_original_name, file_path, file_type, file_size, mime_type, description, uploaded_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      customerId,
+      req.file.filename,
+      req.file.originalname,
+      newPath,
+      path.extname(req.file.originalname).substring(1),
+      req.file.size,
+      req.file.mimetype,
+      description || null,
+      1 // Default user ID, should be from auth session
+    );
+
+    const attachment = db.prepare('SELECT * FROM customer_attachments WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json({ success: true, attachment });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/customers/:customerId/attachments/:attachmentId/download', (req, res) => {
+  const { attachmentId } = req.params;
+  try {
+    const attachment = db.prepare('SELECT * FROM customer_attachments WHERE id = ?').get(attachmentId);
+
+    if (!attachment) {
+      return res.status(404).json({ success: false, message: 'Attachment not found' });
+    }
+
+    if (!fs.existsSync(attachment.file_path)) {
+      return res.status(404).json({ success: false, message: 'File not found on disk' });
+    }
+
+    res.download(attachment.file_path, attachment.file_original_name);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/customers/:customerId/attachments/:attachmentId', (req, res) => {
+  const { attachmentId } = req.params;
+  try {
+    const attachment = db.prepare('SELECT * FROM customer_attachments WHERE id = ?').get(attachmentId);
+
+    if (!attachment) {
+      return res.status(404).json({ success: false, message: 'Attachment not found' });
+    }
+
+    // Delete file from filesystem
+    if (fs.existsSync(attachment.file_path)) {
+      fs.unlinkSync(attachment.file_path);
+    }
+
+    // Delete from database
+    db.prepare('DELETE FROM customer_attachments WHERE id = ?').run(attachmentId);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ===== OPPORTUNITIES ENDPOINTS =====
+app.get('/api/opportunities', (req, res) => {
+  const { stage, customer_id, assigned_to } = req.query;
+  try {
+    let query = `
+      SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
+             u.email as assigned_user_email
+      FROM opportunities o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN users u ON o.assigned_to = u.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (stage) {
+      query += ' AND o.stage = ?';
+      params.push(stage);
+    }
+    if (customer_id) {
+      query += ' AND o.customer_id = ?';
+      params.push(customer_id);
+    }
+    if (assigned_to) {
+      query += ' AND o.assigned_to = ?';
+      params.push(assigned_to);
+    }
+
+    query += ' ORDER BY o.created_at DESC';
+    const opportunities = db.prepare(query).all(...params);
+    res.json(opportunities);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/opportunities/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    const opportunity = db.prepare(`
+      SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.email as customer_email,
+             u.email as assigned_user_email
+      FROM opportunities o
+      LEFT JOIN customers c ON o.customer_id = c.id
+      LEFT JOIN users u ON o.assigned_to = u.id
+      WHERE o.id = ?
+    `).get(id);
+
+    if (!opportunity) {
+      return res.status(404).json({ success: false, message: 'Opportunity not found' });
+    }
+
+    // Get stage history
+    const history = db.prepare(`
+      SELECT h.*, u.email as changed_by_email
+      FROM opportunity_stage_history h
+      LEFT JOIN users u ON h.changed_by = u.id
+      WHERE h.opportunity_id = ?
+      ORDER BY h.changed_at DESC
+    `).all(id);
+
+    res.json({ opportunity, history });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/opportunities', (req, res) => {
+  const {
+    customer_id, title, description, stage, value, currency,
+    probability, expected_close_date, priority, source, assigned_to, created_by
+  } = req.body;
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO opportunities
+      (customer_id, title, description, stage, value, currency, probability,
+       expected_close_date, priority, source, assigned_to, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      customer_id, title, description || null, stage || 'lead', value || 0,
+      currency || 'MXN', probability || 50, expected_close_date || null,
+      priority || 'medium', source || null, assigned_to || null, created_by || 1
+    );
+
+    // Log initial stage in history
+    db.prepare(`
+      INSERT INTO opportunity_stage_history (opportunity_id, to_stage, changed_by, notes)
+      VALUES (?, ?, ?, ?)
+    `).run(result.lastInsertRowid, stage || 'lead', created_by || 1, 'Opportunity created');
+
+    const opportunity = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(result.lastInsertRowid);
+    res.status(201).json({ success: true, opportunity });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.put('/api/opportunities/:id', (req, res) => {
+  const { id } = req.params;
+  const {
+    title, description, stage, value, currency, probability,
+    expected_close_date, actual_close_date, lost_reason, priority,
+    assigned_to, changed_by
+  } = req.body;
+
+  try {
+    // Get current opportunity to check if stage changed
+    const current = db.prepare('SELECT stage FROM opportunities WHERE id = ?').get(id);
+
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'Opportunity not found' });
+    }
+
+    // Update opportunity
+    db.prepare(`
+      UPDATE opportunities
+      SET title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          stage = COALESCE(?, stage),
+          value = COALESCE(?, value),
+          currency = COALESCE(?, currency),
+          probability = COALESCE(?, probability),
+          expected_close_date = COALESCE(?, expected_close_date),
+          actual_close_date = COALESCE(?, actual_close_date),
+          lost_reason = COALESCE(?, lost_reason),
+          priority = COALESCE(?, priority),
+          assigned_to = COALESCE(?, assigned_to),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      title, description, stage, value, currency, probability,
+      expected_close_date, actual_close_date, lost_reason, priority,
+      assigned_to, id
+    );
+
+    // Log stage change if stage was updated
+    if (stage && stage !== current.stage) {
+      db.prepare(`
+        INSERT INTO opportunity_stage_history (opportunity_id, from_stage, to_stage, changed_by)
+        VALUES (?, ?, ?, ?)
+      `).run(id, current.stage, stage, changed_by || 1);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/opportunities/:id', (req, res) => {
+  const { id } = req.params;
+  try {
+    db.prepare('DELETE FROM opportunities WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Opportunity stage history
+app.get('/api/opportunities/:id/history', (req, res) => {
+  const { id } = req.params;
+  try {
+    const history = db.prepare(`
+      SELECT h.*, u.email as changed_by_email
+      FROM opportunity_stage_history h
+      LEFT JOIN users u ON h.changed_by = u.id
+      WHERE h.opportunity_id = ?
+      ORDER BY h.changed_at DESC
+    `).all(id);
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Pipeline statistics
+app.get('/api/opportunities/pipeline/stats', (req, res) => {
+  try {
+    const byStage = db.prepare(`
+      SELECT
+        stage,
+        COUNT(*) as count,
+        COALESCE(SUM(value), 0) as total_value
+      FROM opportunities
+      WHERE stage NOT IN ('won', 'lost')
+      GROUP BY stage
+    `).all();
+
+    const won = db.prepare(`
+      SELECT COUNT(*) as count, COALESCE(SUM(value), 0) as total_value
+      FROM opportunities
+      WHERE stage = 'won'
+    `).get();
+
+    const lost = db.prepare(`
+      SELECT COUNT(*) as count, COALESCE(SUM(value), 0) as total_value
+      FROM opportunities
+      WHERE stage = 'lost'
+    `).get();
+
+    const totalPipeline = db.prepare(`
+      SELECT COALESCE(SUM(value), 0) as total
+      FROM opportunities
+      WHERE stage NOT IN ('won', 'lost')
+    `).get();
+
+    const weightedPipeline = db.prepare(`
+      SELECT COALESCE(SUM(value * probability / 100.0), 0) as weighted
+      FROM opportunities
+      WHERE stage NOT IN ('won', 'lost')
+    `).get();
+
+    res.json({
+      by_stage: byStage.reduce((acc, item) => {
+        acc[item.stage] = { count: item.count, total_value: item.total_value };
+        return acc;
+      }, {}),
+      won: { count: won.count, total_value: won.total_value },
+      lost: { count: lost.count, total_value: lost.total_value },
+      total_pipeline_value: totalPipeline.total,
+      weighted_pipeline_value: weightedPipeline.weighted
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
 // AI Pause / Chatwoot Handoff status check
 async function isAiPaused(phoneNumber) {
   if (process.env.ACTIVATE_CHATWOOT === 'true') {
@@ -492,6 +1074,11 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
     // 1. Save user message
     db.prepare('INSERT INTO messages (phone_number, message_content, sender, message_type, media_url, received_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(phoneNumber, Body, 'user', messageType, mediaUrl, new Date().toISOString());
+
+    // Update or create customer record
+    const patientInfo = db.prepare('SELECT name FROM patients WHERE phone_number = ?').get(phoneNumber);
+    db.prepare('INSERT INTO customers (phone, name, last_interaction) VALUES (?, ?, ?) ON CONFLICT(phone) DO UPDATE SET last_interaction = EXCLUDED.last_interaction, name = COALESCE(EXCLUDED.name, name)')
+      .run(phoneNumber, patientInfo?.name || null, new Date().toISOString());
 
     // 2. Sync with Chatwoot if active
     const conversationId = await syncWithChatwoot(phoneNumber, Body, 'user', messageType, mediaUrl);
@@ -668,6 +1255,83 @@ app.post('/api/webhook/whatsapp', async (req, res) => {
               } else {
                 const result = db.prepare('INSERT INTO appointments (phone_number, patient_name, appointment_date, appointment_type) VALUES (?, ?, ?, ?)')
                   .run(phoneNumber, patient_name, appointment_date, appointment_type);
+
+                // === PHASE 4: Bot Integration - Automatic Opportunity Creation ===
+                try {
+                  // 1. Check if customer exists in customers table
+                  let customer = db.prepare('SELECT * FROM customers WHERE phone = ?').get(phoneNumber);
+
+                  if (!customer) {
+                    // Create new customer record
+                    console.log(`[Bot Integration] Creating new customer for ${phoneNumber}`);
+                    const customerResult = db.prepare(`
+                      INSERT INTO customers (name, phone, category, source, status, last_interaction)
+                      VALUES (?, ?, ?, ?, ?, ?)
+                    `).run(patient_name, phoneNumber, 'prospect', 'whatsapp_bot', 'active', new Date().toISOString());
+
+                    customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerResult.lastInsertRowid);
+                  } else {
+                    // Update existing customer
+                    console.log(`[Bot Integration] Customer exists, updating category and last_interaction`);
+
+                    // Upgrade category if they were just a contact
+                    if (customer.category === 'contact') {
+                      db.prepare('UPDATE customers SET category = ? WHERE id = ?').run('prospect', customer.id);
+                    }
+
+                    // Update last_interaction
+                    db.prepare('UPDATE customers SET last_interaction = ? WHERE id = ?')
+                      .run(new Date().toISOString(), customer.id);
+                  }
+
+                  // 2. Create opportunity linked to customer
+                  console.log(`[Bot Integration] Creating opportunity for customer ID ${customer.id}`);
+                  const opportunityTitle = `Cita: ${appointment_type}`;
+                  const opportunityDescription = `Cita agendada vía WhatsApp bot\n` +
+                    `Fecha: ${start.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'long', timeStyle: 'short' })}\n` +
+                    `Servicio: ${appointment_type}\n` +
+                    `Paciente: ${patient_name}`;
+
+                  const opportunityResult = db.prepare(`
+                    INSERT INTO opportunities
+                    (customer_id, title, description, stage, value, currency, probability,
+                     expected_close_date, priority, source, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  `).run(
+                    customer.id,
+                    opportunityTitle,
+                    opportunityDescription,
+                    'qualified', // They've already scheduled an appointment
+                    0, // Value can be updated manually later
+                    'MXN',
+                    50, // Medium probability since they booked
+                    appointment_date, // Expected close date is the appointment date
+                    'medium',
+                    'whatsapp_bot',
+                    1 // System user ID
+                  );
+
+                  // 3. Log stage history (lead → qualified)
+                  const opportunityId = opportunityResult.lastInsertRowid;
+
+                  // Initial stage as 'lead'
+                  db.prepare(`
+                    INSERT INTO opportunity_stage_history (opportunity_id, to_stage, changed_by, notes)
+                    VALUES (?, ?, ?, ?)
+                  `).run(opportunityId, 'lead', 1, 'Opportunity created via WhatsApp bot');
+
+                  // Immediate progression to 'qualified' (they booked an appointment)
+                  db.prepare(`
+                    INSERT INTO opportunity_stage_history (opportunity_id, from_stage, to_stage, changed_by, notes)
+                    VALUES (?, ?, ?, ?, ?)
+                  `).run(opportunityId, 'lead', 'qualified', 1, 'Automatically qualified - appointment booked');
+
+                  console.log(`[Bot Integration] ✓ Opportunity created (ID: ${opportunityId}) and auto-qualified`);
+                } catch (opportunityError) {
+                  // Log error but don't break appointment booking flow
+                  console.error('[Bot Integration] Error creating opportunity:', opportunityError);
+                }
+                // === End Phase 4 Integration ===
 
                 // Sync with Google Calendar
                 calendarService.createCalendarEvent(calendarId, {

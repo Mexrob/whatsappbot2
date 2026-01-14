@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Configuration
-VPS_IP="154.12.247.115"
-VPS_USER="root"
-VPS_PASS="IdX86ci7"
-APP_NAME="erika-ai"
-REMOTE_DIR="/home/erika/erika-ai"
+VPS_IP="192.168.1.25"
+VPS_USER="ubuntu"
+VPS_PASS="Adm1n#123"
+APP_NAME="wai-chatbot"
+REMOTE_DIR="/home/wai-catbot"
 
 # Colors
 GREEN='\033[0;32m'
@@ -99,7 +99,7 @@ sshpass -p "$VPS_PASS" ssh -o StrictHostKeyChecking=no $VPS_USER@$VPS_IP << 'EOF
     cp /home/erika/erika-ai/nginx.conf.example /etc/nginx/sites-available/erika-ai
     
     # Basic modification for IP-based access if domain not ready
-    sed -i 's/tu-dominio.com/154.12.247.115 _/g' /etc/nginx/sites-available/erika-ai
+    sed -i 's/tu-dominio.com/192.168.1.25 _/g' /etc/nginx/sites-available/erika-ai
     
     # Enable site
     ln -sf /etc/nginx/sites-available/erika-ai /etc/nginx/sites-enabled/
