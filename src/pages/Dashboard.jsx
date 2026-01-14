@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
+import CRM from './CRM';
 import {
   MessageSquare,
   Calendar,
@@ -32,7 +33,8 @@ import {
   Music,
   Video,
   Download,
-  ExternalLink
+  ExternalLink,
+  UserCheck
 } from 'lucide-react';
 
 const SidebarItem = ({ id, iconComponent: Icon, label, activeTab, onClick }) => ( // eslint-disable-line no-unused-vars
@@ -191,6 +193,18 @@ const Dashboard = ({ onLogout }) => {
                 }}
               />
             )}
+            {hasPermission('can_manage_messages') && (
+              <SidebarItem
+                id="crm"
+                iconComponent={UserCheck}
+                label="Clientes (CRM)"
+                activeTab={activeTab}
+                onClick={(id) => {
+                  setActiveTab(id);
+                  setIsMobileMenuOpen(false);
+                }}
+              />
+            )}
             {hasPermission('can_view_settings') && (
               <SidebarItem
                 id="settings"
@@ -229,7 +243,7 @@ const Dashboard = ({ onLogout }) => {
 
             <p className="text-[10px] text-slate-400 px-4 mb-2 uppercase tracking-widest font-bold">Versión Sistema</p>
             <div className="px-4 py-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl mx-2">
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 02/01-16:40 GCal VISUALS</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Build: 14/01-13:00 RBAC+Profile</p>
               <div className="flex items-center gap-1.5 mb-2">
                 <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse" />
                 <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">Auto-Sync: Activado</p>
@@ -263,6 +277,8 @@ const Dashboard = ({ onLogout }) => {
               return <AppointmentsTab phoneFilter={targetPhone} isCompact={isCompact} />;
             case 'calendar': // Agenda Grid View
               return <CalendarTab />;
+            case 'crm':
+              return <CRM />;
             case 'settings':
               return <SettingsTab settings={settings} onUpdate={fetchSettings} />;
             case 'users':
@@ -1424,7 +1440,7 @@ const SettingsTab = ({ settings, onUpdate }) => {
 
 const UsersTab = () => {
   const [users, setUsers] = useState([]);
-  const [formData, setFormData] = useState({ email: '', password: '', role: 'staff', permissions: {} });
+  const [formData, setFormData] = useState({ email: '', password: '', role: 'staff', permissions: {}, name: '', phone: '', google_calendar_id: '' });
   const [editingUser, setEditingUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -1436,9 +1452,13 @@ const UsersTab = () => {
   const fetchUsers = async () => {
     try {
       const response = await api.getUsers();
-      setUsers(response);
+      // Debug: Alert success
+      // alert('Debug: Usuarios cargados: ' + (Array.isArray(response.data) ? response.data.length : 'No array'));
+      console.log('Users loaded:', response.data);
+      setUsers(response.data);
     } catch (error) {
       console.error('Error fetching users:', error);
+      alert('Error cargando lista de usuarios: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -1457,7 +1477,7 @@ const UsersTab = () => {
       fetchUsers();
     } catch (error) {
       console.error('Error saving user:', error);
-      alert('Error al guardar usuario');
+      alert(error.message || 'Error al guardar usuario');
     } finally {
       setLoading(false);
     }
@@ -1481,14 +1501,17 @@ const UsersTab = () => {
       email: user.email,
       password: '',
       role: user.role,
-      permissions: user.permissions || {}
+      permissions: user.permissions || {},
+      name: user.name || '',
+      phone: user.phone || '',
+      google_calendar_id: user.google_calendar_id || ''
     });
     setShowModal(true);
   };
 
   const handleNewUser = () => {
     setEditingUser(null);
-    setFormData({ email: '', password: '', role: 'staff', permissions: {} });
+    setFormData({ email: '', password: '', role: 'staff', permissions: {}, name: '', phone: '', google_calendar_id: '' });
     setShowModal(true);
   };
 
@@ -1597,6 +1620,36 @@ const UsersTab = () => {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Nombre Completo</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Teléfono</label>
+                  <input
+                    type="text"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Google Calendar ID</label>
+                  <input
+                    type="text"
+                    placeholder="email@gmail.com o ID de calendario"
+                    value={formData.google_calendar_id}
+                    onChange={(e) => setFormData({ ...formData, google_calendar_id: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-teal-500/20"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Email</label>
                 <input

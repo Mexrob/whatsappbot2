@@ -34,11 +34,12 @@ function App() {
     }).catch(console.error);
   }, []);
 
-  const handleLoginSuccess = (userData) => {
+  const handleLoginSuccess = (userData, token) => {
     const sessionData = {
       loggedIn: true,
       timestamp: Date.now(),
-      user: userData // Store role and permissions
+      user: userData, // Store role and permissions
+      token: token // Store JWT token for API calls
     };
     localStorage.setItem('erika_session', JSON.stringify(sessionData));
     setView('dashboard');

@@ -4,8 +4,8 @@ import { api } from '../lib/api';
 
 const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('admin@clinica.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
@@ -14,10 +14,10 @@ const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
     try {
       const response = await api.login({ email, password });
       if (response.data.success) {
-        onLogin(response.data.user);
+        onLogin(response.data.user, response.data.token);
       }
     } catch (err) {
-      setError('Credenciales inválidas. Intenta con admin@clinica.com / admin123');
+      setError('Credenciales inválidas. Por favor, verifica tu email y contraseña.');
     }
   };
 
@@ -40,7 +40,7 @@ const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
           </p>
         </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit}>
+        <form name="login-form-unique-123" className="space-y-4" onSubmit={handleSubmit}>
           {error && <p className="text-red-500 text-xs text-center">{error}</p>}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
@@ -48,6 +48,9 @@ const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
+              data-lpignore="true"
+              data-form-type="other"
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all"
               placeholder="tu@clinica.com"
             />
@@ -58,6 +61,9 @@ const AuthPage = ({ onLogin, clinicName, clinicLogo }) => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              data-lpignore="true"
+              data-form-type="other"
               className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all"
               placeholder="••••••••"
             />
