@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROM IA - Brochure del Proyecto</title>
+    <title>ROM IA - Tu Asistente Inteligente de WhatsApp</title>
     <style>
         * {
             margin: 0;
@@ -146,28 +146,6 @@
             line-height: 1.8;
         }
 
-        .tech-stack {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 30px;
-        }
-
-        .tech-badge {
-            background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
-            color: white;
-            padding: 12px 25px;
-            border-radius: 25px;
-            font-weight: 600;
-            box-shadow: 0 4px 10px rgba(37, 211, 102, 0.3);
-            transition: transform 0.3s ease;
-        }
-
-        .tech-badge:hover {
-            transform: scale(1.1);
-        }
-
         .stats-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -271,44 +249,6 @@
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
         }
 
-        .deployment-options {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
-        }
-
-        .deployment-card {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            text-align: center;
-        }
-
-        .deployment-card h4 {
-            color: #128C7E;
-            font-size: 1.3em;
-            margin-bottom: 15px;
-        }
-
-        .deployment-card ul {
-            list-style: none;
-            text-align: left;
-        }
-
-        .deployment-card li {
-            padding: 8px 0;
-            color: #666;
-        }
-
-        .deployment-card li::before {
-            content: "✓ ";
-            color: #25D366;
-            font-weight: bold;
-            margin-right: 8px;
-        }
-
         @media print {
             body {
                 background: white;
@@ -346,166 +286,105 @@
             <!-- Header -->
             <div class="header">
                 <h1>🤖 ROM IA</h1>
-                <p class="tagline">Sistema Inteligente de Gestión de Reservaciones por WhatsApp</p>
+                <p class="tagline">Tu Asistente Inteligente de Reservaciones por WhatsApp</p>
             </div>
 
             <!-- Descripción General -->
             <div class="section">
                 <h2 class="section-title">¿Qué es ROM IA?</h2>
                 <p style="text-align: center; font-size: 1.2em; color: #666; max-width: 800px; margin: 0 auto;">
-                    ROM IA es una plataforma completa que combina un <strong>dashboard administrativo</strong>
-                    con un <strong>bot de WhatsApp inteligente</strong> potenciado por Gemini AI.
-                    Automatiza la gestión de citas, mensajes y clientes, proporcionando una experiencia
-                    profesional y eficiente para tu negocio.
+                    ROM IA es tu nuevo asistente de élite que atiende a tus clientes por WhatsApp las 24 horas del día.
+                    Olvídate de responder las mismas dudas una y otra vez; nuestra <strong>Inteligencia Artificial
+                        (Gemini)</strong>
+                    se encarga de todo, desde informar sobre tus servicios hasta agendar citas automáticamente.
                 </p>
             </div>
 
             <!-- Características Principales -->
             <div class="section">
-                <h2 class="section-title">✨ Características Principales</h2>
+                <h2 class="section-title">✨ Beneficios para tu Negocio</h2>
                 <div class="features-grid">
                     <div class="feature-card">
-                        <span class="feature-icon">📊</span>
-                        <h3>Dashboard Administrativo</h3>
-                        <p>Interfaz moderna y responsive para gestionar todas las operaciones de tu negocio. Control
-                            total sobre citas, mensajes, clientes y configuración.</p>
-                    </div>
-
-                    <div class="feature-card">
                         <span class="feature-icon">🤖</span>
-                        <h3>Bot de WhatsApp IA</h3>
-                        <p>Integración con Gemini AI para conversaciones naturales. Agenda citas automáticamente,
-                            responde preguntas y gestiona clientes 24/7.</p>
+                        <h3>Atención 24/7</h3>
+                        <p>No pierdas ni un solo cliente. Tu asistente inteligente responde al instante, incluso fines
+                            de semana y por la madrugada.</p>
                     </div>
 
                     <div class="feature-card">
                         <span class="feature-icon">📅</span>
-                        <h3>Google Calendar Sync</h3>
-                        <p>Sincronización bidireccional con Google Calendar. Todas las citas se reflejan automáticamente
-                            en tu calendario.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">👥</span>
-                        <h3>Gestión de Clientes CRM</h3>
-                        <p>Sistema completo de CRM con seguimiento de clientes, prospectos, oportunidades de venta,
-                            notas y archivos adjuntos.</p>
+                        <h3>Agenda Inteligente</h3>
+                        <p>Sincronización total con Google Calendar. El sistema solo ofrece horarios disponibles y
+                            agenda la cita de inmediato.</p>
                     </div>
 
                     <div class="feature-card">
                         <span class="feature-icon">💬</span>
-                        <h3>Mensajería Integrada</h3>
-                        <p>Envía y recibe mensajes de WhatsApp directamente desde el dashboard. Historial completo de
-                            conversaciones.</p>
+                        <h3>Conversación Fluida</h3>
+                        <p>A diferencia de los teclados numéricos aburridos, ROM IA conversa de forma natural y amable
+                            con tus clientes.</p>
                     </div>
 
                     <div class="feature-card">
-                        <span class="feature-icon">🔐</span>
-                        <h3>Multi-Usuario & Permisos</h3>
-                        <p>Sistema de roles (Admin/Staff) con permisos granulares. Control de acceso a diferentes
-                            secciones del dashboard.</p>
+                        <span class="feature-icon">📊</span>
+                        <h3>Todo bajo Control</h3>
+                        <p>Accede a un panel administrativo donde podrás ver todos los chats, gestionar tus citas y
+                            conocer tus métricas.</p>
                     </div>
 
                     <div class="feature-card">
-                        <span class="feature-icon">🌐</span>
-                        <h3>Despliegue Flexible</h3>
-                        <p>Múltiples opciones de despliegue: VPS, Docker, Coolify. Configuración rápida en menos de 15
-                            minutos.</p>
+                        <span class="feature-icon">👥</span>
+                        <h3>CRM Avanzado</h3>
+                        <p>Registra automáticamente a tus clientes y prospectos. Nunca olvides un seguimiento
+                            importante.</p>
                     </div>
 
                     <div class="feature-card">
                         <span class="feature-icon">📱</span>
-                        <h3>Diseño Responsive</h3>
-                        <p>Interfaz optimizada para todos los dispositivos. Gestiona tu negocio desde cualquier lugar.
-                        </p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">⚡</span>
-                        <h3>Rendimiento Óptimo</h3>
-                        <p>Base de datos SQLite para operaciones rápidas. Sistema de caché para mensajes duplicados.</p>
+                        <h3>WhatsApp Business</h3>
+                        <p>Utilizamos el canal más potente del mundo. Tus clientes te contactan donde ya están, sin
+                            instalar nada nuevo.</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Stack Tecnológico -->
+            <!-- Cómo funciona -->
             <div class="section">
-                <h2 class="section-title">🛠️ Stack Tecnológico</h2>
-                <div class="tech-stack">
-                    <span class="tech-badge">React 19</span>
-                    <span class="tech-badge">Vite</span>
-                    <span class="tech-badge">Tailwind CSS 4</span>
-                    <span class="tech-badge">Node.js</span>
-                    <span class="tech-badge">Express</span>
-                    <span class="tech-badge">SQLite</span>
-                    <span class="tech-badge">Gemini AI</span>
-                    <span class="tech-badge">YCloud API</span>
-                    <span class="tech-badge">Google Calendar API</span>
-                    <span class="tech-badge">Framer Motion</span>
-                    <span class="tech-badge">Lucide Icons</span>
-                    <span class="tech-badge">PM2</span>
-                    <span class="tech-badge">Docker</span>
-                    <span class="tech-badge">Nginx</span>
-                </div>
-            </div>
-
-            <!-- Arquitectura -->
-            <div class="section">
-                <h2 class="section-title">🏗️ Arquitectura del Sistema</h2>
+                <h2 class="section-title">🚀 ¿Cómo funciona?</h2>
                 <div class="architecture-diagram">
                     <div class="flow-item">
                         <div class="flow-number">1</div>
                         <div class="flow-content">
-                            <h4>Cliente WhatsApp</h4>
-                            <p>El usuario envía un mensaje por WhatsApp a través de YCloud</p>
+                            <h4>El cliente te contacta</h4>
+                            <p>El interesado envía un mensaje a tu número de negocio preguntando sobre servicios o
+                                disponibilidad.</p>
                         </div>
                     </div>
 
                     <div class="flow-item">
                         <div class="flow-number">2</div>
                         <div class="flow-content">
-                            <h4>Webhook Endpoint</h4>
-                            <p>El servidor recibe el webhook en /api/webhook/whatsapp</p>
+                            <h4>La IA atiende</h4>
+                            <p>El asistente resuelve dudas, explica tus servicios y muestra los espacios disponibles en
+                                tu agenda.</p>
                         </div>
                     </div>
 
                     <div class="flow-item">
                         <div class="flow-number">3</div>
                         <div class="flow-content">
-                            <h4>Procesamiento IA</h4>
-                            <p>Gemini AI analiza el mensaje y determina la intención del usuario</p>
+                            <h4>Cita Confirmada</h4>
+                            <p>Sin intervención humana, la cita queda agendada y registrada en tu calendario y panel de
+                                control.</p>
                         </div>
                     </div>
 
                     <div class="flow-item">
                         <div class="flow-number">4</div>
                         <div class="flow-content">
-                            <h4>Ejecución de Herramientas</h4>
-                            <p>El bot ejecuta funciones como consultar disponibilidad o agendar citas</p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">5</div>
-                        <div class="flow-content">
-                            <h4>Sincronización</h4>
-                            <p>Los datos se guardan en SQLite y se sincronizan con Google Calendar</p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">6</div>
-                        <div class="flow-content">
-                            <h4>Respuesta al Usuario</h4>
-                            <p>El bot envía la respuesta al usuario por WhatsApp vía YCloud</p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">7</div>
-                        <div class="flow-content">
-                            <h4>Dashboard en Tiempo Real</h4>
-                            <p>Los administradores ven todas las interacciones en el dashboard web</p>
+                            <h4>Tú solo ejecutas</h4>
+                            <p>Tú te dedicas a lo que mejor sabes hacer, con la tranquilidad de que tu agenda se llena
+                                sola.</p>
                         </div>
                     </div>
                 </div>
@@ -513,278 +392,63 @@
 
             <!-- Estadísticas -->
             <div class="section">
-                <h2 class="section-title">📈 Capacidades del Sistema</h2>
+                <h2 class="section-title">📈 Resultados Reales</h2>
                 <div class="stats-container">
                     <div class="stat-box">
-                        <div class="stat-number">24/7</div>
-                        <div class="stat-label">Disponibilidad</div>
+                        <div class="stat-number">100%</div>
+                        <div class="stat-label">Automatización</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-number">∞</div>
-                        <div class="stat-label">Conversaciones Simultáneas</div>
+                        <div class="stat-number">0</div>
+                        <div class="stat-label">Mensajes Ignorados</div>
                     </div>
                     <div class="stat-box">
                         <div class="stat-number">&lt;2s</div>
                         <div class="stat-label">Tiempo de Respuesta</div>
                     </div>
                     <div class="stat-box">
-                        <div class="stat-number">100%</div>
-                        <div class="stat-label">Automatización</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Opciones de Despliegue -->
-            <div class="section">
-                <h2 class="section-title">🚀 Opciones de Despliegue</h2>
-                <div class="deployment-options">
-                    <div class="deployment-card">
-                        <h4>🖥️ VPS Tradicional</h4>
-                        <ul>
-                            <li>Ubuntu 22.04</li>
-                            <li>Node.js + PM2</li>
-                            <li>Nginx + SSL</li>
-                            <li>Despliegue en ~15 min</li>
-                        </ul>
-                    </div>
-
-                    <div class="deployment-card">
-                        <h4>🐳 Docker</h4>
-                        <ul>
-                            <li>Contenedor optimizado</li>
-                            <li>Docker Compose</li>
-                            <li>Fácil escalabilidad</li>
-                            <li>Portabilidad total</li>
-                        </ul>
-                    </div>
-
-                    <div class="deployment-card">
-                        <h4>☁️ Coolify</h4>
-                        <ul>
-                            <li>PaaS auto-hospedado</li>
-                            <li>Deploy con Git</li>
-                            <li>SSL automático</li>
-                            <li>Gestión simplificada</li>
-                        </ul>
-                    </div>
-
-                    <div class="deployment-card">
-                        <h4>🔄 Multi-Instancia</h4>
-                        <ul>
-                            <li>Múltiples bots</li>
-                            <li>Bases de datos separadas</li>
-                            <li>Diferentes negocios</li>
-                            <li>Un solo servidor</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Funcionalidades del Dashboard -->
-            <div class="section">
-                <h2 class="section-title">💼 Módulos del Dashboard</h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <span class="feature-icon">📋</span>
-                        <h3>Gestión de Citas</h3>
-                        <p>Vista de calendario, confirmación/cancelación de citas, reprogramación, sincronización con
-                            Google Calendar.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">💬</span>
-                        <h3>Centro de Mensajes</h3>
-                        <p>Historial completo de conversaciones, envío de mensajes desde el dashboard, gestión de chats
-                            activos.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">👥</span>
-                        <h3>CRM Completo</h3>
-                        <p>Gestión de clientes, prospectos y contactos. Pipeline de ventas, oportunidades, notas y
-                            archivos adjuntos.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">⚙️</span>
-                        <h3>Configuración</h3>
-                        <p>Personalización del nombre de la clínica, logo, servicios, horarios, zona horaria y
-                            configuración del bot.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">👤</span>
-                        <h3>Gestión de Usuarios</h3>
-                        <p>Crear usuarios con diferentes roles, asignar permisos granulares, control de acceso por
-                            módulo.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">📊</span>
-                        <h3>Estadísticas</h3>
-                        <p>Métricas de conversaciones, citas agendadas, tasa de conversión, análisis de rendimiento del
-                            bot.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Capacidades del Bot IA -->
-            <div class="section">
-                <h2 class="section-title">🧠 Capacidades del Bot IA</h2>
-                <div class="architecture-diagram">
-                    <div class="flow-item">
-                        <div class="flow-number">✓</div>
-                        <div class="flow-content">
-                            <h4>Consulta de Disponibilidad</h4>
-                            <p>El bot puede consultar horarios disponibles en tiempo real y sugerir opciones al cliente.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">✓</div>
-                        <div class="flow-content">
-                            <h4>Agendamiento Automático</h4>
-                            <p>Agenda citas automáticamente validando disponibilidad y evitando conflictos de horario.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">✓</div>
-                        <div class="flow-content">
-                            <h4>Validación de Datos</h4>
-                            <p>Valida fechas, horarios y zona horaria para evitar errores en las reservaciones.</p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">✓</div>
-                        <div class="flow-content">
-                            <h4>Conversación Natural</h4>
-                            <p>Mantiene conversaciones fluidas y naturales gracias a Gemini AI con contexto de
-                                conversación.</p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">✓</div>
-                        <div class="flow-content">
-                            <h4>Información de Servicios</h4>
-                            <p>Proporciona información sobre servicios, precios y detalles del negocio configurados en
-                                el dashboard.</p>
-                        </div>
-                    </div>
-
-                    <div class="flow-item">
-                        <div class="flow-number">✓</div>
-                        <div class="flow-content">
-                            <h4>Gestión de Pacientes</h4>
-                            <p>Registra automáticamente nuevos pacientes y mantiene historial de interacciones.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Requisitos -->
-            <div class="section">
-                <h2 class="section-title">📋 Requisitos del Sistema</h2>
-                <div class="deployment-options">
-                    <div class="deployment-card">
-                        <h4>🔑 APIs Necesarias</h4>
-                        <ul>
-                            <li>Gemini API Key</li>
-                            <li>YCloud API Key</li>
-                            <li>Google Calendar API</li>
-                            <li>WhatsApp Business</li>
-                        </ul>
-                    </div>
-
-                    <div class="deployment-card">
-                        <h4>💻 Servidor</h4>
-                        <ul>
-                            <li>VPS Ubuntu 22.04</li>
-                            <li>2GB RAM mínimo</li>
-                            <li>20GB almacenamiento</li>
-                            <li>Dominio propio</li>
-                        </ul>
-                    </div>
-
-                    <div class="deployment-card">
-                        <h4>🛠️ Software</h4>
-                        <ul>
-                            <li>Node.js 20+</li>
-                            <li>Nginx</li>
-                            <li>PM2</li>
-                            <li>Certbot (SSL)</li>
-                        </ul>
-                    </div>
-
-                    <div class="deployment-card">
-                        <h4>📱 Configuración</h4>
-                        <ul>
-                            <li>Meta Business Suite</li>
-                            <li>YCloud Account</li>
-                            <li>Google Cloud Project</li>
-                            <li>Webhook URL</li>
-                        </ul>
+                        <div class="stat-number">+40%</div>
+                        <div class="stat-label">Conversión de Ventas</div>
                     </div>
                 </div>
             </div>
 
             <!-- Ventajas Competitivas -->
             <div class="section">
-                <h2 class="section-title">🏆 Ventajas Competitivas</h2>
+                <h2 class="section-title">🏆 La Ventaja ROM IA</h2>
                 <div class="features-grid">
                     <div class="feature-card">
                         <span class="feature-icon">💰</span>
-                        <h3>Costo-Efectivo</h3>
-                        <p>Solución completa sin costos de licencias mensuales. Solo pagas por las APIs que uses.</p>
+                        <h3>Inversión Inteligente</h3>
+                        <p>Mucho más económico que un recepcionista físico y con mayor disponibilidad.</p>
                     </div>
 
                     <div class="feature-card">
                         <span class="feature-icon">🔒</span>
-                        <h3>Control Total</h3>
-                        <p>Datos en tu propio servidor. Sin dependencias de terceros para el almacenamiento.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">🎨</span>
-                        <h3>Personalizable</h3>
-                        <p>Código abierto y modificable. Adapta el sistema a las necesidades específicas de tu negocio.
+                        <h3>Datos en tus Manos</h3>
+                        <p>Tu base de datos de clientes reside en tu propio entorno, garantizando seguridad y soberanía.
                         </p>
                     </div>
 
                     <div class="feature-card">
                         <span class="feature-icon">⚡</span>
-                        <h3>Rápido Despliegue</h3>
-                        <p>Configuración completa en menos de 15 minutos con scripts automatizados.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">📈</span>
-                        <h3>Escalable</h3>
-                        <p>Soporta múltiples instancias y miles de conversaciones simultáneas.</p>
-                    </div>
-
-                    <div class="feature-card">
-                        <span class="feature-icon">🔄</span>
-                        <h3>Actualizaciones Fáciles</h3>
-                        <p>Script de despliegue automatizado para actualizaciones sin downtime.</p>
+                        <h3>Despliegue Inmediato</h3>
+                        <p>Nos encargamos de toda la configuración técnica para que tú solo empieces a recibir citas.
+                        </p>
                     </div>
                 </div>
             </div>
 
             <!-- Call to Action -->
             <div class="cta-section">
-                <h2>¿Listo para Automatizar tu Negocio?</h2>
+                <h2>¿Listo para llevar tu negocio al siguiente nivel?</h2>
                 <p style="font-size: 1.2em; margin-top: 20px; opacity: 0.95;">
-                    Implementa ROM IA y transforma la gestión de tus citas y clientes con inteligencia artificial
+                    Deja que la Inteligencia Artificial trabaje para ti mientras tú haces crecer tu marca.
                 </p>
-                <a href="#" class="cta-button">Comenzar Ahora</a>
+                <a href="https://wa.me/525512345678" class="cta-button">¡Solicitar una Demo Gratis!</a>
                 <p style="margin-top: 30px; font-size: 0.9em; opacity: 0.8;">
-                    📧 Contacto: roberto@romsolucionesprofesionales.com<br>
-                    🌐 GitHub: github.com/tu-usuario/whatsappbot2
+                    📧 soporte@romsolucionesprofesionales.com<br>
+                    🌐 www.romsolucionesprofesionales.com
                 </p>
             </div>
         </div>
